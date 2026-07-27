@@ -1,3 +1,106 @@
 spring:
   application:
     name: relayq
+  datasource:
+    # 用 +08:00 显式固定驱动解释并同步 MySQL session；数字偏移无需依赖容器内的时区表。
+    url: jdbc:mysql://localhost:3306/relayq?connectionTimeZone=%2B08:00&forceConnectionTimeZoneToSession=true
+    username: relayq
+    password: relayq
+    hikari:
+      # 32 个最大 worker 写并发 + puller(1) + reaper(1) + snapshot(1) + 管理 API 余量(5) = 40。
+      maximum-pool-size: 40
+      # 空闲期只保留与默认 core worker 数相同的连接，突发时再扩到上述预算上限。
+      minimum-idle: 8
+  jackson:
+    # 管理 API 的请求、响应和错误字段统一使用 snake_case。
+    property-naming-strategy: SNAKE_CASE
+  lifecycle:
+    # 大于 worker 的 30 秒 shutdown grace，为 RelayqLifecycle 留出完整停机窗口。
+    timeout-per-shutdown-phase: 45s
+
+server:
+  # 先停止接收新请求，再由 RelayqLifecycle 按 §10 顺序关闭调度组件。
+  shutdown: graceful
+
+relayq:
+  # RelayQ 自动配置总开关。
+  enabled: true
+  # 留空时按 hostname + pid + 随机后缀生成；多实例部署应显式覆盖。
+  instance-id: ""
+  pull:
+    # 基础轮询间隔（毫秒）。
+    interval-ms: 1000
+    # 多实例轮询间隔抖动比例。
+    jitter-ratio: 0.2
+    # 单次最大抢占任务数。
+    batch-size: 100
+    # 连续空拉的最大退避时间（毫秒）；提交成功会发出本地唤醒信号抢占等待，
+    # 因此这里可以保留较大的上限，兼顾新任务响应性与空闲时不 herd 打数据库。
+    empty-backoff-max-ms: 30000
+    # 连续空拉的指数退避倍率。
+    empty-backoff-multiplier: 2.0
+  worker:
+    # 常驻工作线程数。
+    core-size: 8
+    # 最大工作线程数；Hikari 预算按此上限计算。
+    max-size: 32
+    # worker 有界队列容量。
+    queue-capacity: 1000
+    # 非核心 worker 保活时间（秒）。
+    keep-alive-seconds: 60
+    # 优雅停机等待 worker 排空的时间（秒）。
+    shutdown-grace-seconds: 30
+  lease:
+    # 任务租约有效期（秒）。
+    ttl-seconds: 30
+    # 续租周期为 ttl / renew-interval-divisor。
+    renew-interval-divisor: 3
+    # 过期租约扫描间隔（毫秒）。
+    reaper-interval-ms: 5000
+    # 单次最大回收任务数。
+    reaper-batch-size: 100
+  retry:
+    # 新任务默认最大重试次数。
+    default-max-retry: 3
+    # 第一次重试的退避基数（毫秒）。
+    base-delay-ms: 1000
+    # 指数退避倍率。
+    multiplier: 2.0
+    # 重试退避上限（毫秒）。
+    max-delay-ms: 60000
+    # 重试时间抖动比例。
+    jitter-ratio: 0.2
+  handler:
+    # 单次 handler 执行超时（毫秒）。
+    timeout-ms: 30000
+  snapshot:
+    # 事故快照总开关。
+    enabled: true
+    # 单线程快照池的有界队列容量。
+    queue-capacity: 4
+    # 同一任务的快照冷却时间（秒）。
+    cooldown-seconds: 300
+    # 单实例每分钟允许采集的快照数。
+    rate-per-minute: 5
+    # thread dump 按 UTF-8 字节截断的上限。
+    thread-dump-max-bytes: 1048576
+    # 超过该线程数时放弃锁详情，以控制采集开销。
+    lock-info-thread-limit: 1000
+    # 快照整体采集超时（毫秒）。
+    collect-timeout-ms: 5000
+    # 连续失败达到该次数时触发快照。
+    fail-threshold: 3
+  metrics:
+    # backlog count(*) 指标缓存时间（秒）。
+    backlog-cache-seconds: 5
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+logging:
+  pattern:
+    # core 在执行链路写入 MDC；pattern 必须显式渲染 traceId 才能用于串联日志。
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [traceId=%X{traceId}] %logger{36} - %msg%n"

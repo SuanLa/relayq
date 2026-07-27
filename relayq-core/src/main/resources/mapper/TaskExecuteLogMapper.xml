@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.suanla.relayq.core.mapper.TaskExecuteLogMapper">
+
+    <resultMap id="TaskExecuteLogResultMap" type="com.suanla.relayq.core.domain.TaskExecuteLog">
+        <id property="id" column="id"/>
+        <result property="taskId" column="task_id"/>
+        <result property="attemptNo" column="attempt_no"/>
+        <result property="startTime" column="start_time"/>
+        <result property="endTime" column="end_time"/>
+        <result property="outcome" column="outcome"/>
+        <result property="failureKind" column="failure_kind"/>
+        <result property="errorStack" column="error_stack"/>
+        <result property="errorStackOriginalLen" column="error_stack_original_len"/>
+        <result property="workerInstance" column="worker_instance"/>
+        <result property="traceId" column="trace_id"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="selectByTaskAndAttempt" resultMap="TaskExecuteLogResultMap">
+        SELECT id, task_id, attempt_no, start_time, end_time, outcome, failure_kind,
+               error_stack, error_stack_original_len, worker_instance, trace_id, created_at
+        FROM task_execute_log
+        WHERE task_id = #{taskId}
+          AND attempt_no = #{attemptNo}
+    </select>
+
+    <select id="selectByTaskId" resultMap="TaskExecuteLogResultMap">
+        SELECT id, task_id, attempt_no, start_time, end_time, outcome, failure_kind,
+               error_stack, error_stack_original_len, worker_instance, trace_id, created_at
+        FROM task_execute_log
+        WHERE task_id = #{taskId}
+        ORDER BY attempt_no, id
+    </select>
+
+</mapper>

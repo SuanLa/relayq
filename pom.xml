@@ -17,6 +17,29 @@
     <name>relayq-parent</name>
     <description>RelayQ - 轻量任务调度与消息平台</description>
 
+    <url>https://github.com/&lt;SuanLa&gt;/relayq</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>suanla</id>
+            <name>&lt;SuanLa&gt;</name>
+            <email>hzy193432@gmail.com</email>
+        </developer>
+    </developers>
+
+    <scm>
+        <url>https://github.com/&lt;SuanLa&gt;/relayq</url>
+        <connection>scm:git:https://github.com/&lt;SuanLa&gt;/relayq.git</connection>
+    </scm>
+
     <modules>
         <module>relayq-core</module>
         <module>relayq-spring-boot-starter</module>

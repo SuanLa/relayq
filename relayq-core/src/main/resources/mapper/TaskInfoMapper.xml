@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.suanla.relayq.core.mapper.TaskInfoMapper">
+
+    <resultMap id="TaskInfoResultMap" type="com.suanla.relayq.core.domain.TaskInfo">
+        <id property="id" column="id"/>
+        <result property="bizKey" column="biz_key"/>
+        <result property="handlerName" column="handler_name"/>
+        <result property="params" column="params"/>
+        <result property="status" column="status"/>
+        <result property="scheduledTime" column="scheduled_time"/>
+        <result property="retryCount" column="retry_count"/>
+        <result property="maxRetry" column="max_retry"/>
+        <result property="nextRetryTime" column="next_retry_time"/>
+        <result property="leaseOwner" column="lease_owner"/>
+        <result property="leaseExpireTime" column="lease_expire_time"/>
+        <result property="currentAttemptNo" column="current_attempt_no"/>
+        <result property="traceId" column="trace_id"/>
+        <result property="lastFailureKind" column="last_failure_kind"/>
+        <result property="redriveBy" column="redrive_by"/>
+        <result property="redriveReason" column="redrive_reason"/>
+        <result property="redriveAt" column="redrive_at"/>
+        <result property="errorMsg" column="error_msg"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="TaskInfoColumns">
+        id, biz_key, handler_name, params, status, scheduled_time,
+        retry_count, max_retry, next_retry_time, lease_owner, lease_expire_time,
+        current_attempt_no, trace_id, last_failure_kind,
+        redrive_by, redrive_reason, redrive_at, error_msg, created_at, updated_at
+    </sql>
+
+    <insert id="insertForSubmission">
+        INSERT INTO task_info (
+            id, biz_key, handler_name, params, status, scheduled_time,
+            retry_count, max_retry, current_attempt_no, trace_id
+        )
+        VALUES (
+            #{task.id},
+            #{task.bizKey},
+            #{task.handlerName},
+            #{task.params},
+            #{task.status},
+            <!--
+              scheduled_time 会与 NOW(3) 比较，必须由数据库时钟生成。
+              只有调用方明确给出绝对墙钟时刻时才原样写入，该值按数据库时区解释。
+            -->
+            <choose>
+                <when test="absoluteScheduledTime != null">
+                    #{absoluteScheduledTime}
+                </when>
+                <when test="delaySeconds != null">
+                    DATE_ADD(NOW(3), INTERVAL #{delaySeconds} SECOND)
+                </when>
+                <otherwise>
+                    NOW(3)
+                </otherwise>
+            </choose>,
+            #{task.retryCount},
+            #{task.maxRetry},
+            #{task.currentAttemptNo},
+            #{task.traceId}
+        )
+    </insert>
+
+    <select id="selectDueIdsForUpdateSkipLocked" resultType="java.lang.Long">
+        SELECT id
+        FROM task_info
+        WHERE status = 'PENDING'
+          AND scheduled_time &lt;= NOW(3)
+        ORDER BY scheduled_time
+        LIMIT #{batchSize}
+        FOR UPDATE SKIP LOCKED
+    </select>
+
+    <update id="markRunning">
+        UPDATE task_info
+        SET status = 'RUNNING',
+            lease_owner = #{instanceId},
+            lease_expire_time = DATE_ADD(NOW(3), INTERVAL #{leaseSeconds} SECOND),
+            current_attempt_no = current_attempt_no + 1,
+            updated_at = NOW(3)
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          AND status = 'PENDING'
+    </update>
+
+    <select id="selectByIdList" resultMap="TaskInfoResultMap">
+        SELECT
+        <include refid="TaskInfoColumns"/>
+        FROM task_info
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <update id="finishWithFencing">
+        UPDATE task_info
+        SET status = #{status},
+            error_msg = #{errorMsg},
+            last_failure_kind = #{lastFailureKind},
+            next_retry_time = NULL,
+            lease_owner = NULL,
+            lease_expire_time = NULL,
+            updated_at = NOW(3)
+        WHERE id = #{id}
+          AND status = 'RUNNING'
+          AND lease_owner = #{owner}
+    </update>
+
+    <update id="requeueForRetry">
+        UPDATE task_info
+        SET status = 'PENDING',
+            retry_count = retry_count + 1,
+            <!--
+              scheduled_time 和 next_retry_time 都会与 NOW(3) 比较，
+              相对延迟必须基于同一个数据库时间源展开。
+            -->
+            scheduled_time = DATE_ADD(
+                NOW(3), INTERVAL #{delayMillis} * 1000 MICROSECOND),
+            next_retry_time = DATE_ADD(
+                NOW(3), INTERVAL #{delayMillis} * 1000 MICROSECOND),
+            error_msg = #{errorMsg},
+            last_failure_kind = #{failureKind},
+            lease_owner = NULL,
+            lease_expire_time = NULL,
+            updated_at = NOW(3)
+        WHERE id = #{id}
+          AND status = 'RUNNING'
+          AND lease_owner = #{owner}
+    </update>
+
+    <update id="requeueRejected">
+        UPDATE task_info
+        SET status = 'PENDING',
+            lease_owner = NULL,
+            lease_expire_time = NULL,
+            updated_at = NOW(3)
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          AND status = 'RUNNING'
+          AND lease_owner = #{owner}
+    </update>
+
+    <update id="reclaimExpiredLeases">
+        UPDATE task_info
+        SET status = 'PENDING',
+            lease_owner = NULL,
+            lease_expire_time = NULL,
+            updated_at = NOW(3)
+        WHERE status = 'RUNNING'
+          AND lease_expire_time &lt; NOW(3)
+        ORDER BY lease_expire_time
+        LIMIT #{limit}
+    </update>
+
+    <update id="renewLease">
+        UPDATE task_info
+        SET lease_expire_time = DATE_ADD(NOW(3), INTERVAL #{leaseSeconds} SECOND),
+            updated_at = NOW(3)
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          AND status = 'RUNNING'
+          AND lease_owner = #{owner}
+    </update>
+
+    <update id="cancelPending">
+        UPDATE task_info
+        SET status = 'CANCELLED',
+            updated_at = NOW(3)
+        WHERE id = #{id}
+          AND status = 'PENDING'
+    </update>
+
+    <update id="redriveDeadLetter">
+        UPDATE task_info
+        SET status = 'PENDING',
+            retry_count = 0,
+            scheduled_time = NOW(3),
+            next_retry_time = NULL,
+            lease_owner = NULL,
+            lease_expire_time = NULL,
+            redrive_by = #{redriveBy},
+            redrive_reason = #{redriveReason},
+            redrive_at = NOW(3),
+            updated_at = NOW(3)
+        WHERE id = #{id}
+          AND status = 'DEAD'
+    </update>
+
+    <select id="selectByBizKey" resultMap="TaskInfoResultMap">
+        SELECT
+        <include refid="TaskInfoColumns"/>
+        FROM task_info
+        WHERE biz_key = #{bizKey}
+    </select>
+
+    <select id="selectPageByStatus" resultMap="TaskInfoResultMap">
+        SELECT
+        <include refid="TaskInfoColumns"/>
+        FROM task_info
+        WHERE status = #{status}
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countByStatus" resultType="long">
+        SELECT COUNT(*)
+        FROM task_info
+        WHERE status = #{status}
+    </select>
+
+    <resultMap id="TaskStatusCountResultMap"
+               type="com.suanla.relayq.core.metrics.TaskStatusCount">
+        <result property="status" column="status"/>
+        <result property="count" column="count"/>
+    </resultMap>
+
+    <select id="countGroupedByStatus" resultMap="TaskStatusCountResultMap">
+        SELECT status, COUNT(*) AS count
+        FROM task_info
+        GROUP BY status
+    </select>
+
+</mapper>

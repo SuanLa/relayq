@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.suanla.relayq.core.mapper.TaskSnapshotMapper">
+
+    <resultMap id="TaskSnapshotResultMap" type="com.suanla.relayq.core.domain.TaskSnapshot">
+        <id property="id" column="id"/>
+        <result property="taskId" column="task_id"/>
+        <result property="executeLogId" column="execute_log_id"/>
+        <result property="attemptNo" column="attempt_no"/>
+        <result property="triggerType" column="trigger_type"/>
+        <result property="threadDump" column="thread_dump"/>
+        <result property="threadDumpOriginalLen" column="thread_dump_original_len"/>
+        <result property="lockInfoIncluded" column="lock_info_included"/>
+        <result property="poolState" column="pool_state"/>
+        <result property="heapState" column="heap_state"/>
+        <result property="backlogCount" column="backlog_count"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="selectByTaskId" resultMap="TaskSnapshotResultMap">
+        SELECT id, task_id, execute_log_id, attempt_no, trigger_type,
+               thread_dump, thread_dump_original_len, lock_info_included,
+               pool_state, heap_state, backlog_count, created_at
+        FROM task_snapshot
+        WHERE task_id = #{taskId}
+        ORDER BY created_at, id
+    </select>
+
+</mapper>

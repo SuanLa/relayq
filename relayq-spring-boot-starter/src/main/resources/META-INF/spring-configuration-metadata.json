@@ -1,0 +1,232 @@
+{
+  "groups": [
+    {
+      "name": "relayq",
+      "type": "com.suanla.relayq.core.config.RelayqProperties",
+      "sourceType": "com.suanla.relayq.core.config.RelayqProperties"
+    },
+    {
+      "name": "relayq.pull",
+      "type": "com.suanla.relayq.core.config.RelayqProperties$Pull",
+      "sourceType": "com.suanla.relayq.core.config.RelayqProperties"
+    },
+    {
+      "name": "relayq.worker",
+      "type": "com.suanla.relayq.core.config.RelayqProperties$Worker",
+      "sourceType": "com.suanla.relayq.core.config.RelayqProperties"
+    },
+    {
+      "name": "relayq.lease",
+      "type": "com.suanla.relayq.core.config.RelayqProperties$Lease",
+      "sourceType": "com.suanla.relayq.core.config.RelayqProperties"
+    },
+    {
+      "name": "relayq.retry",
+      "type": "com.suanla.relayq.core.config.RelayqProperties$Retry",
+      "sourceType": "com.suanla.relayq.core.config.RelayqProperties"
+    },
+    {
+      "name": "relayq.handler",
+      "type": "com.suanla.relayq.core.config.RelayqProperties$Handler",
+      "sourceType": "com.suanla.relayq.core.config.RelayqProperties"
+    },
+    {
+      "name": "relayq.snapshot",
+      "type": "com.suanla.relayq.core.config.RelayqProperties$Snapshot",
+      "sourceType": "com.suanla.relayq.core.config.RelayqProperties"
+    },
+    {
+      "name": "relayq.metrics",
+      "type": "com.suanla.relayq.core.config.RelayqProperties$Metrics",
+      "sourceType": "com.suanla.relayq.core.config.RelayqProperties"
+    }
+  ],
+  "properties": [
+    {
+      "name": "relayq.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "Whether RelayQ scheduling auto-configuration is enabled."
+    },
+    {
+      "name": "relayq.instance-id",
+      "type": "java.lang.String",
+      "defaultValue": "",
+      "description": "Instance identity used as the lease owner; generated automatically when empty."
+    },
+    {
+      "name": "relayq.pull.interval-ms",
+      "type": "java.lang.Long",
+      "defaultValue": 1000,
+      "description": "Base polling interval in milliseconds."
+    },
+    {
+      "name": "relayq.pull.jitter-ratio",
+      "type": "java.lang.Double",
+      "defaultValue": 0.2,
+      "description": "Polling interval jitter ratio."
+    },
+    {
+      "name": "relayq.pull.batch-size",
+      "type": "java.lang.Integer",
+      "defaultValue": 100,
+      "description": "Maximum number of tasks claimed in one poll."
+    },
+    {
+      "name": "relayq.pull.empty-backoff-max-ms",
+      "type": "java.lang.Long",
+      "defaultValue": 30000,
+      "description": "Maximum empty-poll backoff in milliseconds."
+    },
+    {
+      "name": "relayq.pull.empty-backoff-multiplier",
+      "type": "java.lang.Double",
+      "defaultValue": 2.0,
+      "description": "Empty-poll exponential backoff multiplier."
+    },
+    {
+      "name": "relayq.worker.core-size",
+      "type": "java.lang.Integer",
+      "defaultValue": 8,
+      "description": "Core worker thread count."
+    },
+    {
+      "name": "relayq.worker.max-size",
+      "type": "java.lang.Integer",
+      "defaultValue": 32,
+      "description": "Maximum worker thread count."
+    },
+    {
+      "name": "relayq.worker.queue-capacity",
+      "type": "java.lang.Integer",
+      "defaultValue": 1000,
+      "description": "Worker queue capacity."
+    },
+    {
+      "name": "relayq.worker.keep-alive-seconds",
+      "type": "java.lang.Long",
+      "defaultValue": 60,
+      "description": "Non-core worker keep-alive time in seconds."
+    },
+    {
+      "name": "relayq.worker.shutdown-grace-seconds",
+      "type": "java.lang.Long",
+      "defaultValue": 30,
+      "description": "Worker shutdown grace period in seconds."
+    },
+    {
+      "name": "relayq.lease.ttl-seconds",
+      "type": "java.lang.Long",
+      "defaultValue": 30,
+      "description": "Task lease time-to-live in seconds."
+    },
+    {
+      "name": "relayq.lease.renew-interval-divisor",
+      "type": "java.lang.Integer",
+      "defaultValue": 3,
+      "description": "Lease renewal interval divisor applied to the lease TTL."
+    },
+    {
+      "name": "relayq.lease.reaper-interval-ms",
+      "type": "java.lang.Long",
+      "defaultValue": 5000,
+      "description": "Expired lease scan interval in milliseconds."
+    },
+    {
+      "name": "relayq.lease.reaper-batch-size",
+      "type": "java.lang.Integer",
+      "defaultValue": 100,
+      "description": "Maximum expired leases reclaimed per scan."
+    },
+    {
+      "name": "relayq.retry.default-max-retry",
+      "type": "java.lang.Integer",
+      "defaultValue": 3,
+      "description": "Default maximum retry count for new tasks."
+    },
+    {
+      "name": "relayq.retry.base-delay-ms",
+      "type": "java.lang.Long",
+      "defaultValue": 1000,
+      "description": "Base retry delay in milliseconds."
+    },
+    {
+      "name": "relayq.retry.multiplier",
+      "type": "java.lang.Double",
+      "defaultValue": 2.0,
+      "description": "Retry exponential backoff multiplier."
+    },
+    {
+      "name": "relayq.retry.max-delay-ms",
+      "type": "java.lang.Long",
+      "defaultValue": 60000,
+      "description": "Maximum retry delay in milliseconds."
+    },
+    {
+      "name": "relayq.retry.jitter-ratio",
+      "type": "java.lang.Double",
+      "defaultValue": 0.2,
+      "description": "Retry delay jitter ratio."
+    },
+    {
+      "name": "relayq.handler.timeout-ms",
+      "type": "java.lang.Long",
+      "defaultValue": 30000,
+      "description": "Task handler timeout in milliseconds."
+    },
+    {
+      "name": "relayq.snapshot.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "Whether incident snapshots are enabled."
+    },
+    {
+      "name": "relayq.snapshot.queue-capacity",
+      "type": "java.lang.Integer",
+      "defaultValue": 4,
+      "description": "Snapshot executor queue capacity."
+    },
+    {
+      "name": "relayq.snapshot.cooldown-seconds",
+      "type": "java.lang.Long",
+      "defaultValue": 300,
+      "description": "Per-task snapshot cooldown in seconds."
+    },
+    {
+      "name": "relayq.snapshot.rate-per-minute",
+      "type": "java.lang.Integer",
+      "defaultValue": 5,
+      "description": "Process-local snapshot rate limit per minute."
+    },
+    {
+      "name": "relayq.snapshot.thread-dump-max-bytes",
+      "type": "java.lang.Integer",
+      "defaultValue": 1048576,
+      "description": "Maximum UTF-8 byte size of a stored thread dump."
+    },
+    {
+      "name": "relayq.snapshot.lock-info-thread-limit",
+      "type": "java.lang.Integer",
+      "defaultValue": 1000,
+      "description": "Thread count above which lock details are omitted."
+    },
+    {
+      "name": "relayq.snapshot.collect-timeout-ms",
+      "type": "java.lang.Long",
+      "defaultValue": 5000,
+      "description": "Snapshot collection timeout in milliseconds."
+    },
+    {
+      "name": "relayq.snapshot.fail-threshold",
+      "type": "java.lang.Integer",
+      "defaultValue": 3,
+      "description": "Consecutive failure threshold that triggers a snapshot."
+    },
+    {
+      "name": "relayq.metrics.backlog-cache-seconds",
+      "type": "java.lang.Long",
+      "defaultValue": 5,
+      "description": "Backlog metric cache duration in seconds."
+    }
+  ]
+}

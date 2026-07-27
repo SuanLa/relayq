@@ -2,8 +2,7 @@
 #
 #   docker compose up -d
 #
-# 当前只起 MySQL（对应三周计划 D3）。双实例应用服务在 Week 2 多实例验证时加入，
-# 那之前不放占位配置——跑不起来的 compose 比没有 compose 更糟。
+# MySQL 与两个 RelayQ 应用实例共享同一任务库，用于验证多实例并发下零重复执行。
 
 services:
   mysql:
@@ -38,6 +37,40 @@ services:
       timeout: 5s
       retries: 20
       start_period: 20s
+
+  relayq-app-1:
+    build:
+      context: .
+      dockerfile: relayq-example/Dockerfile
+    container_name: relayq-app-1
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/relayq?connectionTimeZone=%2B08:00&forceConnectionTimeZoneToSession=true"
+      SPRING_DATASOURCE_USERNAME: relayq
+      SPRING_DATASOURCE_PASSWORD: relayq
+      RELAYQ_INSTANCE_ID: relayq-app-1
+    ports:
+      - "8081:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  relayq-app-2:
+    build:
+      context: .
+      dockerfile: relayq-example/Dockerfile
+    container_name: relayq-app-2
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/relayq?connectionTimeZone=%2B08:00&forceConnectionTimeZoneToSession=true"
+      SPRING_DATASOURCE_USERNAME: relayq
+      SPRING_DATASOURCE_PASSWORD: relayq
+      RELAYQ_INSTANCE_ID: relayq-app-2
+    ports:
+      - "8082:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
 
 volumes:
   relayq-mysql-data:
