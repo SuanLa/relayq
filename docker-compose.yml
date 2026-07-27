@@ -1,0 +1,43 @@
+# RelayQ 本地环境
+#
+#   docker compose up -d
+#
+# 当前只起 MySQL（对应三周计划 D3）。双实例应用服务在 Week 2 多实例验证时加入，
+# 那之前不放占位配置——跑不起来的 compose 比没有 compose 更糟。
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: relayq-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: relayq
+      MYSQL_DATABASE: relayq
+      MYSQL_USER: relayq
+      MYSQL_PASSWORD: relayq
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      # 刻意不设 --transaction-isolation=READ-COMMITTED。
+      # 服务端保持 MySQL 默认的 REPEATABLE READ，由应用在拉取事务上显式声明 RC。
+      # 两个理由：
+      #   1. 应用侧的隔离级别声明必须是「载荷」而不是「装饰」——服务端兜底会让它失效也没人发现；
+      #   2. D17 要做 RC vs RR 的提交 P99 对比压测，服务端锁死就没得比了。
+      # 设计理由见 docs/architecture.md §5.2。
+      - --log-bin-trust-function-creators=1
+    volumes:
+      - relayq-mysql-data:/var/lib/mysql
+      # DDL 唯一权威定义在 core 模块里，这里直接挂载，不复制第二份
+      - ./relayq-core/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-urelayq", "-prelayq" ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+volumes:
+  relayq-mysql-data:
