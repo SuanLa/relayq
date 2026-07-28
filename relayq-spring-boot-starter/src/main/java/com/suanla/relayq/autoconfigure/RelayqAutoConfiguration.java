@@ -58,8 +58,8 @@ import java.util.stream.Stream;
         DataSourceAutoConfiguration.class,
         MybatisPlusAutoConfiguration.class
 }, afterName = {
-        "org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration",
-        "org.springframework.boot.micrometer.metrics.autoconfigure.CompositeMeterRegistryAutoConfiguration"
+        "org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration",
+        "org.springframework.boot.actuate.autoconfigure.metrics.CompositeMeterRegistryAutoConfiguration"
 })
 @ConditionalOnBean(DataSource.class)
 @ConditionalOnProperty(prefix = "relayq", name = "enabled", matchIfMissing = true)
