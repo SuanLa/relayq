@@ -1,8 +1,8 @@
-package com.suanla.relayq.example.api;
+package com.suanla.relayq.example.controller;
 
 import com.suanla.relayq.core.snapshot.SnapshotAdmission;
-import com.suanla.relayq.example.api.dto.ManualSnapshotRequest;
-import com.suanla.relayq.example.api.dto.SnapshotAcceptedResponse;
+import com.suanla.relayq.example.dto.ManualSnapshotRequest;
+import com.suanla.relayq.example.dto.SnapshotAcceptedResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

@@ -1,10 +1,10 @@
-package com.suanla.relayq.example.api;
+package com.suanla.relayq.example.controller;
 
 import com.suanla.relayq.core.domain.TaskInfo;
 import com.suanla.relayq.core.service.DeadLetterService;
 import com.suanla.relayq.core.service.PageResult;
 import com.suanla.relayq.core.service.TaskQueryService;
-import com.suanla.relayq.example.api.dto.RedriveRequest;
+import com.suanla.relayq.example.dto.RedriveRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;

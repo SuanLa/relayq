@@ -1,4 +1,4 @@
-package com.suanla.relayq.example.api;
+package com.suanla.relayq.example.component;
 
 import com.suanla.relayq.core.support.TraceContext;
 import jakarta.servlet.FilterChain;

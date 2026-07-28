@@ -1,4 +1,4 @@
-package com.suanla.relayq.example.api;
+package com.suanla.relayq.example.exception;
 
 public class ApiResourceNotFoundException extends RuntimeException {
 

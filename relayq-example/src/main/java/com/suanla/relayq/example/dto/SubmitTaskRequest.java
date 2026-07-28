@@ -1,4 +1,4 @@
-package com.suanla.relayq.example.api.dto;
+package com.suanla.relayq.example.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.JsonNode;

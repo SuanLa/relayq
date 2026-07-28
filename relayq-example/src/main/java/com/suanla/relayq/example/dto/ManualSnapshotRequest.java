@@ -1,4 +1,4 @@
-package com.suanla.relayq.example.api.dto;
+package com.suanla.relayq.example.dto;
 
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;

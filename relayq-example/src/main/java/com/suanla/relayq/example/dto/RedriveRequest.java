@@ -1,4 +1,4 @@
-package com.suanla.relayq.example.api.dto;
+package com.suanla.relayq.example.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

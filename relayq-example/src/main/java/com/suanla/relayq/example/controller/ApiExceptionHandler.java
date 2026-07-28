@@ -1,10 +1,11 @@
-package com.suanla.relayq.example.api;
+package com.suanla.relayq.example.controller;
 
 import com.suanla.relayq.core.exception.HandlerNotRegisteredException;
 import com.suanla.relayq.core.exception.IllegalTaskStateException;
 import com.suanla.relayq.core.exception.TaskNotFoundException;
 import com.suanla.relayq.core.support.TraceContext;
-import com.suanla.relayq.example.api.dto.ApiErrorResponse;
+import com.suanla.relayq.example.dto.ApiErrorResponse;
+import com.suanla.relayq.example.exception.ApiResourceNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
