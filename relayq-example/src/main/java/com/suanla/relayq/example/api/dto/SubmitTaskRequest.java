@@ -1,12 +1,12 @@
 package com.suanla.relayq.example.api.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
-import tools.jackson.databind.JsonNode;
 
 import java.time.LocalDateTime;
 

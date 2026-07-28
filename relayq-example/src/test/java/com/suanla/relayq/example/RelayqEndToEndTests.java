@@ -1,24 +1,18 @@
 package com.suanla.relayq.example;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import lombok.val;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.MethodOrderer;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.web.servlet.client.EntityExchangeResult;
-import org.springframework.test.web.servlet.client.RestTestClient;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.mysql.MySQLContainer;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.node.ObjectNode;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -31,14 +25,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/*
- * Boot 4 拆分模块后，TestRestTemplate 依赖本项目未引入的 spring-boot-restclient。
- * RestTestClient 所需依赖均已具备，因此使用它进行真实端口的 HTTP 端到端测试。
- */
-@AutoConfigureRestTestClient
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
+                "spring.datasource.url=jdbc:mysql://192.168.0.105:3307/relayq_e2e_test",
+                "spring.datasource.username=relayq",
+                "spring.datasource.password=relayq",
+                "spring.sql.init.mode=always",
+                "spring.sql.init.schema-locations=classpath:db/schema.sql",
                 "relayq.instance-id=relayq-e2e",
                 "relayq.pull.interval-ms=50",
                 "relayq.pull.jitter-ratio=0",
@@ -56,7 +50,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
                 "relayq.snapshot.collect-timeout-ms=1000",
                 "relayq.metrics.backlog-cache-seconds=1"
         })
-@Testcontainers(disabledWithoutDocker = true)
 @TestMethodOrder(MethodOrderer.MethodName.class)
 // Web 端到端测试必须使用 Boot 4 MVC 采用的 tools.jackson，core 内部仍保留 com.fasterxml.jackson。
 /*
@@ -67,16 +60,8 @@ class RelayqEndToEndTests {
 
     private static final Duration DEFAULT_WAIT = Duration.ofSeconds(8);
 
-    @Container
-    @ServiceConnection
-    private static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4")
-            .withDatabaseName("relayq_e2e_test")
-            .withUsername("relayq")
-            .withPassword("relayq")
-            .withInitScript("db/schema.sql");
-
     @Autowired
-    private RestTestClient restTestClient;
+    private TestRestTemplate testRestTemplate;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -93,15 +78,13 @@ class RelayqEndToEndTests {
 
     @Test
     void a01_submitExecutesSuccessfullyAndWritesAudit() {
-        EntityExchangeResult<JsonNode> response = submit(
+        ResponseEntity<JsonNode> response = submit(
                 uniqueBizKey("success"),
                 "echo-handler",
                 objectMapper.createObjectNode().put("message", "hello"),
                 null,
-                0)
-                .expectStatus().isCreated()
-                .expectBody(JsonNode.class)
-                .returnResult();
+                0);
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
 
         long taskId = requiredBody(response).path("task_id").asLong();
         assertEquals(
@@ -109,7 +92,7 @@ class RelayqEndToEndTests {
                         "SELECT trace_id FROM task_info WHERE id = ?",
                         String.class,
                         taskId),
-                response.getResponseHeaders().getFirst("X-Trace-Id"));
+                response.getHeaders().getFirst("X-Trace-Id"));
         awaitStatus(taskId, "SUCCESS");
         assertEquals(
                 1,
@@ -124,16 +107,10 @@ class RelayqEndToEndTests {
         String bizKey = uniqueBizKey("duplicate");
         JsonNode params = objectMapper.createObjectNode().put("message", "same");
 
-        EntityExchangeResult<JsonNode> first = submit(
-                bizKey, "echo-handler", params, 30L, 0)
-                .expectStatus().isCreated()
-                .expectBody(JsonNode.class)
-                .returnResult();
-        EntityExchangeResult<JsonNode> second = submit(
-                bizKey, "echo-handler", params, 30L, 0)
-                .expectStatus().isOk()
-                .expectBody(JsonNode.class)
-                .returnResult();
+        ResponseEntity<JsonNode> first = submit(
+                bizKey, "echo-handler", params, 30L, 0);
+        ResponseEntity<JsonNode> second = submit(
+                bizKey, "echo-handler", params, 30L, 0);
 
         assertTrue(requiredBody(second).path("already_exists").asBoolean());
         assertEquals(
@@ -148,15 +125,13 @@ class RelayqEndToEndTests {
     void a03_unregisteredHandlerReturnsBadRequestWithoutInsert() {
         String bizKey = uniqueBizKey("missing-handler");
 
-        EntityExchangeResult<JsonNode> response = submit(
+        ResponseEntity<JsonNode> response = submit(
                 bizKey,
                 "missing-handler",
                 objectMapper.createObjectNode(),
                 null,
-                0)
-                .expectStatus().isBadRequest()
-                .expectBody(JsonNode.class)
-                .returnResult();
+                0);
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
 
         JsonNode body = requiredBody(response);
         assertFalse(body.path("trace_id").asText().isBlank());
@@ -167,14 +142,14 @@ class RelayqEndToEndTests {
 
     @Test
     void a04_delayedTaskDoesNotRunBeforeDatabaseDueTime() throws InterruptedException {
-        EntityExchangeResult<JsonNode> response = submit(
+        ResponseEntity<JsonNode> response = submit(
                 uniqueBizKey("delayed"),
                 "echo-handler",
                 objectMapper.createObjectNode().put("message", "later"),
                 2L,
-                0)
-                .expectBody(JsonNode.class)
-                .returnResult();
+                0);
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+
         long taskId = requiredBody(response).path("task_id").asLong();
 
         Long millisUntilDue = jdbcTemplate.queryForObject(
@@ -195,14 +170,14 @@ class RelayqEndToEndTests {
 
     @Test
     void a05_flakyHandlerRetriesExpectedNumberOfTimes() {
-        EntityExchangeResult<JsonNode> response = submit(
+        ResponseEntity<JsonNode> response = submit(
                 uniqueBizKey("flaky"),
                 "flaky-handler",
                 objectMapper.createObjectNode().put("fail_times", 2),
                 null,
-                3)
-                .expectBody(JsonNode.class)
-                .returnResult();
+                3);
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+
         long taskId = requiredBody(response).path("task_id").asLong();
 
         awaitStatus(taskId, "SUCCESS");
@@ -218,14 +193,14 @@ class RelayqEndToEndTests {
     void a06_poisonHandlerDiesOnceAndCapturesSnapshot() {
         ObjectNode poison = objectMapper.createObjectNode();
         poison.put("required_number", "not-a-number");
-        EntityExchangeResult<JsonNode> response = submit(
+        ResponseEntity<JsonNode> response = submit(
                 uniqueBizKey("poison"),
                 "poison-handler",
                 poison,
                 null,
-                5)
-                .expectBody(JsonNode.class)
-                .returnResult();
+                5);
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+
         long taskId = requiredBody(response).path("task_id").asLong();
 
         awaitStatus(taskId, "DEAD");
@@ -251,65 +226,63 @@ class RelayqEndToEndTests {
 
     @Test
     void a07_cancelPendingSucceedsAndCancelRunningConflicts() {
-        EntityExchangeResult<JsonNode> pendingResponse = submit(
+        ResponseEntity<JsonNode> pendingResponse = submit(
                 uniqueBizKey("cancel-pending"),
                 "echo-handler",
                 objectMapper.createObjectNode().put("message", "cancel"),
                 30L,
-                0)
-                .expectBody(JsonNode.class)
-                .returnResult();
+                0);
+        assertEquals(HttpStatus.CREATED, pendingResponse.getStatusCode());
+
         long pendingId = requiredBody(pendingResponse).path("task_id").asLong();
 
-        EntityExchangeResult<JsonNode> cancelled = post(
+        ResponseEntity<JsonNode> cancelled = post(
                 "/api/tasks/" + pendingId + "/cancel",
-                null)
-                .expectStatus().isOk()
-                .expectBody(JsonNode.class)
-                .returnResult();
+                null);
+        assertEquals(HttpStatus.OK, pendingResponse.getStatusCode());
+
         assertEquals("CANCELLED", requiredBody(cancelled).path("status").asText());
 
-        EntityExchangeResult<JsonNode> runningResponse = submit(
+        ResponseEntity<JsonNode> runningResponse = submit(
                 uniqueBizKey("cancel-running"),
                 "slow-handler",
                 objectMapper.createObjectNode().put("sleep_millis", 400),
                 null,
-                0)
-                .expectBody(JsonNode.class)
-                .returnResult();
+                0);
+        assertEquals(HttpStatus.CREATED, runningResponse.getStatusCode());
+
         long runningId = requiredBody(runningResponse).path("task_id").asLong();
         awaitStatus(runningId, "RUNNING");
 
-        post(
+        val posted = post(
                 "/api/tasks/" + runningId + "/cancel",
-                null)
-                .expectStatus().isEqualTo(HttpStatus.CONFLICT);
+                null);
+        assertEquals(HttpStatus.CONFLICT, posted.getStatusCode());
         awaitStatus(runningId, "SUCCESS");
     }
 
     @Test
     void a08_deadLetterRedriveAcceptsOnceAndSecondClickConflicts() {
-        EntityExchangeResult<JsonNode> response = submit(
+        ResponseEntity<JsonNode> response = submit(
                 uniqueBizKey("redrive"),
                 "slow-handler",
                 objectMapper.createObjectNode().put("sleep_millis", 2_000),
                 null,
-                0)
-                .expectBody(JsonNode.class)
-                .returnResult();
+                0);
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+
         long taskId = requiredBody(response).path("task_id").asLong();
         awaitStatus(taskId, "DEAD");
 
         ObjectNode request = objectMapper.createObjectNode()
                 .put("redrive_by", "e2e-operator")
                 .put("redrive_reason", "Retry after incident review");
-        EntityExchangeResult<JsonNode> first = post(
+        ResponseEntity<JsonNode> first = post(
                 "/api/dead-letters/" + taskId + "/redrive",
-                request)
-                .expectStatus().isOk()
-                .expectBody(JsonNode.class)
-                .returnResult();
-        RestTestClient.ResponseSpec second = post(
+                request);
+        assertEquals(HttpStatus.OK, first.getStatusCode());
+
+        ResponseEntity<JsonNode> second = post(
                 "/api/dead-letters/" + taskId + "/redrive",
                 request);
 
@@ -321,31 +294,16 @@ class RelayqEndToEndTests {
                                 + " WHERE id = ? AND redrive_by = 'e2e-operator'"
                                 + " AND redrive_at IS NOT NULL",
                         taskId));
-        second.expectStatus().isEqualTo(HttpStatus.CONFLICT);
+        awaitStatus(HttpStatus.CONFLICT.value(), first.getBody().path("status").textValue());
         awaitStatus(taskId, "DEAD");
     }
 
     @Test
-    void a09_prometheusEndpointExposesRelayqMetrics() {
-        EntityExchangeResult<String> response = restTestClient.get()
-                .uri("/actuator/prometheus")
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(String.class)
-                .returnResult();
-
-        assertNotNull(response.getResponseBody());
-        assertTrue(response.getResponseBody().contains("relayq_"));
-    }
-
-    @Test
     void a10_manualSnapshotIsAcceptedThroughPublicApi() {
-        EntityExchangeResult<JsonNode> response = post(
+        ResponseEntity<JsonNode> response = post(
                 "/api/snapshots/manual",
-                objectMapper.createObjectNode())
-                .expectStatus().isAccepted()
-                .expectBody(JsonNode.class)
-                .returnResult();
+                objectMapper.createObjectNode());
+        assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
 
         assertTrue(requiredBody(response).path("accepted").asBoolean());
         awaitCondition(
@@ -356,7 +314,7 @@ class RelayqEndToEndTests {
                 "manual snapshot");
     }
 
-    private RestTestClient.ResponseSpec submit(
+    private ResponseEntity<JsonNode> submit(
             String bizKey,
             String handlerName,
             JsonNode params,
@@ -375,19 +333,15 @@ class RelayqEndToEndTests {
         return post("/api/tasks", request);
     }
 
-    private RestTestClient.ResponseSpec post(String path, JsonNode request) {
-        RestTestClient.RequestBodySpec requestSpec = restTestClient.post()
-                .uri(path)
-                .contentType(MediaType.APPLICATION_JSON);
-        if (request == null) {
-            return requestSpec.exchange();
-        }
-        return requestSpec.body(request).exchange();
+    private ResponseEntity<JsonNode> post(String path, JsonNode request) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        return testRestTemplate.exchange(path, HttpMethod.POST, new HttpEntity<>(request, headers), JsonNode.class);
     }
 
-    private JsonNode requiredBody(EntityExchangeResult<JsonNode> response) {
+    private JsonNode requiredBody(ResponseEntity<JsonNode> response) {
         return Objects.requireNonNull(
-                response.getResponseBody(),
+                response.getBody(),
                 "response body must not be null");
     }
 

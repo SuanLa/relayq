@@ -27,6 +27,7 @@ import com.suanla.relayq.core.support.SnowflakeIdGenerator;
 import org.apache.ibatis.builder.xml.XMLMapperBuilder;
 import org.apache.ibatis.datasource.pooled.PooledDataSource;
 import org.apache.ibatis.io.Resources;
+import org.apache.ibatis.jdbc.ScriptRunner;
 import org.apache.ibatis.mapping.Environment;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -35,13 +36,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.AbstractPlatformTransactionManager;
 import org.springframework.transaction.support.DefaultTransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.mysql.MySQLContainer;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -54,7 +53,6 @@ import java.sql.Statement;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -72,19 +70,18 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
-@Testcontainers(disabledWithoutDocker = true)
+@SpringBootTest
 /*
  * 这里刻意不给 MySQL 容器设置 TZ，让裸容器 UTC 与开发机 JVM 时区保持错位。
  * 所有参与调度和租约比较的测试数据都基于数据库 NOW(3) 生成，使本类同时承担时钟漂移回归测试。
  */
 class SchedulerIntegrationTest {
 
-    @Container
-    private static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4")
-            .withDatabaseName("relayq_scheduler_test")
-            .withUsername("relayq")
-            .withPassword("relayq")
-            .withInitScript("db/schema.sql");
+    private static final String JDBC_URL = System.getProperty(
+            "relayq.test.jdbc-url",
+            "jdbc:mysql://192.168.0.105:3307/relayq_scheduler_test");
+    private static final String USERNAME = System.getProperty("relayq.test.username", "relayq");
+    private static final String PASSWORD = System.getProperty("relayq.test.password", "relayq");
 
     private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator(22);
 
@@ -101,10 +98,16 @@ class SchedulerIntegrationTest {
     @BeforeAll
     static void createSqlSessionFactory() throws IOException {
         PooledDataSource dataSource = new PooledDataSource(
-                MYSQL.getDriverClassName(),
-                MYSQL.getJdbcUrl(),
-                MYSQL.getUsername(),
-                MYSQL.getPassword());
+                "com.mysql.cj.jdbc.Driver", JDBC_URL, USERNAME, PASSWORD);
+        try (Connection conn = dataSource.getConnection();
+             Reader reader = Resources.getResourceAsReader("db/schema.sql")) {
+            ScriptRunner runner = new ScriptRunner(conn);
+            runner.setLogWriter(null);
+            runner.setErrorLogWriter(null);
+            runner.runScript(reader);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         Environment environment = new Environment(
                 "scheduler-testcontainers",
                 new JdbcTransactionFactory(),

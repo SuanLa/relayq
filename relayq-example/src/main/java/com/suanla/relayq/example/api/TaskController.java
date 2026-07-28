@@ -1,5 +1,6 @@
 package com.suanla.relayq.example.api;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.suanla.relayq.core.domain.TaskExecuteLog;
 import com.suanla.relayq.core.domain.TaskInfo;
 import com.suanla.relayq.core.domain.TaskSnapshot;
@@ -29,7 +30,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 

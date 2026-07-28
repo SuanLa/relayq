@@ -18,6 +18,7 @@ import com.suanla.relayq.core.support.SnowflakeIdGenerator;
 import org.apache.ibatis.builder.xml.XMLMapperBuilder;
 import org.apache.ibatis.datasource.pooled.PooledDataSource;
 import org.apache.ibatis.io.Resources;
+import org.apache.ibatis.jdbc.ScriptRunner;
 import org.apache.ibatis.mapping.Environment;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -26,12 +27,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.mysql.MySQLContainer;
+import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
@@ -46,20 +46,18 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@Testcontainers(disabledWithoutDocker = true)
+@SpringBootTest
 /*
  * 这里刻意不给 MySQL 容器设置 TZ，让裸容器 UTC 与开发机 JVM 时区保持错位。
  * 调度与租约字段的测试造数一律使用数据库 NOW(3)，避免应用时间掩盖跨时区缺陷。
  */
 class RelayqServiceIntegrationTest {
 
-    @Container
-    private static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4")
-            .withDatabaseName("relayq_test")
-            .withUsername("relayq")
-            .withPassword("relayq")
-            // 测试直接执行生产 schema，避免测试 DDL 与唯一权威定义漂移。
-            .withInitScript("db/schema.sql");
+    private static final String JDBC_URL = System.getProperty(
+            "relayq.test.jdbc-url",
+            "jdbc:mysql://192.168.0.105:3307/relayq_scheduler_test");
+    private static final String USERNAME = System.getProperty("relayq.test.username", "relayq");
+    private static final String PASSWORD = System.getProperty("relayq.test.password", "relayq");
 
     private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator(21);
 
@@ -67,8 +65,6 @@ class RelayqServiceIntegrationTest {
 
     private SqlSession sqlSession;
     private TaskInfoMapper taskInfoMapper;
-    private TaskExecuteLogMapper taskExecuteLogMapper;
-    private TaskSnapshotMapper taskSnapshotMapper;
     private TaskSubmitService taskSubmitService;
     private TaskStateMachine taskStateMachine;
     private TaskQueryService taskQueryService;
@@ -77,10 +73,17 @@ class RelayqServiceIntegrationTest {
     @BeforeAll
     static void createSqlSessionFactory() throws IOException {
         PooledDataSource dataSource = new PooledDataSource(
-                MYSQL.getDriverClassName(),
-                MYSQL.getJdbcUrl(),
-                MYSQL.getUsername(),
-                MYSQL.getPassword());
+                "com.mysql.cj.jdbc.Driver", JDBC_URL, USERNAME, PASSWORD);
+        try (Connection conn = dataSource.getConnection();
+             Reader reader = Resources.getResourceAsReader("db/schema.sql")) {
+            ScriptRunner runner = new ScriptRunner(conn);
+            runner.setLogWriter(null);
+            runner.setErrorLogWriter(null);
+            runner.runScript(reader);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+
         Environment environment = new Environment(
                 "testcontainers",
                 new JdbcTransactionFactory(),
@@ -99,8 +102,8 @@ class RelayqServiceIntegrationTest {
     void setUp() {
         sqlSession = sqlSessionFactory.openSession(true);
         taskInfoMapper = sqlSession.getMapper(TaskInfoMapper.class);
-        taskExecuteLogMapper = sqlSession.getMapper(TaskExecuteLogMapper.class);
-        taskSnapshotMapper = sqlSession.getMapper(TaskSnapshotMapper.class);
+        TaskExecuteLogMapper taskExecuteLogMapper = sqlSession.getMapper(TaskExecuteLogMapper.class);
+        TaskSnapshotMapper taskSnapshotMapper = sqlSession.getMapper(TaskSnapshotMapper.class);
 
         HandlerRegistry handlerRegistry = new HandlerRegistry();
         handlerRegistry.register("registered-handler", context -> {

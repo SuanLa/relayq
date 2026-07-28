@@ -18,6 +18,7 @@ import com.suanla.relayq.core.support.SnowflakeIdGenerator;
 import org.apache.ibatis.builder.xml.XMLMapperBuilder;
 import org.apache.ibatis.datasource.pooled.PooledDataSource;
 import org.apache.ibatis.io.Resources;
+import org.apache.ibatis.jdbc.ScriptRunner;
 import org.apache.ibatis.mapping.Environment;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -26,13 +27,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.mysql.MySQLContainer;
+import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDateTime;
@@ -47,19 +47,18 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@Testcontainers(disabledWithoutDocker = true)
+@SpringBootTest
 /*
  * 不给容器设置 TZ；本类新增的 created_at 是纯审计时间，
  * 所有会和 NOW(3) 比较的任务与租约字段仍由数据库生成。
  */
 class SnapshotIntegrationTest {
 
-    @Container
-    private static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4")
-            .withDatabaseName("relayq_snapshot_test")
-            .withUsername("relayq")
-            .withPassword("relayq")
-            .withInitScript("db/schema.sql");
+    private static final String JDBC_URL = System.getProperty(
+            "relayq.test.jdbc-url",
+            "jdbc:mysql://192.168.0.105:3307/relayq_scheduler_test");
+    private static final String USERNAME = System.getProperty("relayq.test.username", "relayq");
+    private static final String PASSWORD = System.getProperty("relayq.test.password", "relayq");
 
     private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator(23);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -78,10 +77,17 @@ class SnapshotIntegrationTest {
     @BeforeAll
     static void createSqlSessionFactory() throws IOException {
         PooledDataSource dataSource = new PooledDataSource(
-                MYSQL.getDriverClassName(),
-                MYSQL.getJdbcUrl(),
-                MYSQL.getUsername(),
-                MYSQL.getPassword());
+                "com.mysql.cj.jdbc.Driver", JDBC_URL, USERNAME, PASSWORD);
+        try (Connection conn = dataSource.getConnection();
+             Reader reader = Resources.getResourceAsReader("db/schema.sql")) {
+            ScriptRunner runner = new ScriptRunner(conn);
+            runner.setLogWriter(null);
+            runner.setErrorLogWriter(null);
+            runner.runScript(reader);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+
         Environment environment = new Environment(
                 "snapshot-testcontainers",
                 new JdbcTransactionFactory(),
