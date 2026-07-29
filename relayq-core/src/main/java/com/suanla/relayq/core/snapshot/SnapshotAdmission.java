@@ -1,6 +1,7 @@
 package com.suanla.relayq.core.snapshot;
 
 import com.suanla.relayq.core.config.RelayqProperties;
+import com.suanla.relayq.core.domain.TriggerType;
 import com.suanla.relayq.core.executor.NamedThreadFactory;
 import com.suanla.relayq.core.metrics.PoolMetricsSource;
 import com.suanla.relayq.core.metrics.RelayqMetrics;
@@ -97,11 +98,18 @@ public class SnapshotAdmission
         admit(trigger);
     }
 
+    /**
+     * @throws IllegalArgumentException 当 trigger.taskId() 为 null
+     */
     public void admit(SnapshotTrigger trigger) {
+        Objects.requireNonNull(trigger, "trigger must not be null");
+        if (trigger.taskId() == null) {
+            throw new IllegalArgumentException(
+                    "trigger taskId must not be null");
+        }
         if (!enabled) {
             return;
         }
-        Objects.requireNonNull(trigger, "trigger must not be null");
         executor.execute(new AdmissionCommand(trigger));
     }
 
@@ -147,7 +155,7 @@ public class SnapshotAdmission
     private void runPipeline(SnapshotTrigger trigger) {
         long now = nanoTime.getAsLong();
         SnapshotKey key = new SnapshotKey(trigger.taskId(), trigger.attemptNo());
-        if (admittedKeys.containsKey(key)) {
+        if (trigger.triggerType() != TriggerType.MANUAL && admittedKeys.containsKey(key)) {
             metrics.recordSnapshot(RelayqMetrics.SnapshotOutcome.THROTTLED);
             return;
         }
@@ -160,10 +168,12 @@ public class SnapshotAdmission
             return;
         }
 
-        admittedKeys.put(key, Boolean.TRUE);
-        if (trigger.taskId() != null) {
-            lastSnapshotByTask.put(trigger.taskId(), now);
+        if (trigger.triggerType() != TriggerType.MANUAL) {
+            admittedKeys.put(key, Boolean.TRUE);
         }
+
+        lastSnapshotByTask.put(trigger.taskId(), now);
+
         try {
             SnapshotCapture capture = collector.collect(trigger);
             RelayqMetrics.SnapshotOutcome outcome = writer.write(capture)
@@ -182,7 +192,7 @@ public class SnapshotAdmission
     }
 
     private boolean isCoolingDown(Long taskId, long now) {
-        if (taskId == null || cooldownNanos == 0L) {
+        if (cooldownNanos == 0L) {
             return false;
         }
         Long previous = lastSnapshotByTask.get(taskId);

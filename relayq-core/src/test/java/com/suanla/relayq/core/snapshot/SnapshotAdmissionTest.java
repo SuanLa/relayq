@@ -15,11 +15,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -106,15 +102,56 @@ class SnapshotAdmissionTest {
     }
 
     @Test
-    void manualTriggerUsesSameDeduplicationAndAdmissionPipeline() {
+    void manualTriggerBypassesDeduplication() {
+        // cooldown 必须为 0，否则挡住第二次的是冷却而不是去重，测不出想测的东西
         Fixture fixture = fixture(properties(8, 0, 20), immediateCollector(), true);
 
         fixture.admission().admit(trigger(31L, 4, TriggerType.DEAD));
         fixture.admission().triggerManual(31L, 4);
         awaitOutcomes(fixture.registry(), 2);
 
+        assertEquals(2.0D, snapshotCount(fixture.registry(), "captured"));
+        assertEquals(0.0D, snapshotCount(fixture.registry(), "throttled"));
+    }
+
+    @Test
+    void manualTriggerStillRespectsCooldown() {
+        Fixture fixture = fixture(properties(8, 60, 20), immediateCollector(), true);
+
+        fixture.admission().triggerManual(32L, 1);
+        awaitOutcomes(fixture.registry(), 1);
+        fixture.admission().triggerManual(32L, 2);
+        awaitOutcomes(fixture.registry(), 2);
+
         assertEquals(1.0D, snapshotCount(fixture.registry(), "captured"));
         assertEquals(1.0D, snapshotCount(fixture.registry(), "throttled"));
+    }
+
+    @Test
+    void manualTriggerDoesNotPolluteDeduplicationTable() {
+        // 同样要 cooldown=0，否则无法区分「被冷却挡住」和「被污染的去重表挡住」
+        Fixture fixture = fixture(properties(8, 0, 20), immediateCollector(), true);
+
+        fixture.admission().triggerManual(33L, 5);
+        awaitOutcomes(fixture.registry(), 1);
+
+        SnapshotTrigger auto = trigger(33L, 5, TriggerType.FAIL_THRESHOLD);
+        fixture.admission().admit(auto);
+        awaitOutcomes(fixture.registry(), 2);
+
+        verify(fixture.collector()).collect(auto);
+        assertEquals(2.0D, snapshotCount(fixture.registry(), "captured"));
+        assertEquals(0.0D, snapshotCount(fixture.registry(), "throttled"));
+    }
+
+    @Test
+    void nullTaskIdIsRejectedBeforeReachingThePool() {
+        Fixture fixture = fixture(properties(8, 0, 20), immediateCollector(), true);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> fixture.admission().triggerManual(null, null));
+        assertEquals(0.0D, snapshotCount(fixture.registry(), "captured"));
     }
 
     @Test

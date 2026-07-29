@@ -1,4 +1,4 @@
-package com.suanla.relayq.example.controller;
+package com.suanla.relayq.example.handler;
 
 import com.suanla.relayq.core.exception.HandlerNotRegisteredException;
 import com.suanla.relayq.core.exception.IllegalTaskStateException;
