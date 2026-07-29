@@ -71,8 +71,7 @@ public class SnapshotCollector {
         String threadDump = renderThreadDump(threads);
         enforceTimeout(startedAt);
 
-        Map<String, Object> poolState = new LinkedHashMap<>();
-        poolState.putAll(metrics.currentPoolStates());
+        Map<String, Object> poolState = new LinkedHashMap<>(metrics.currentPoolStates());
         poolState.put("taskContext", taskContext(trigger));
         enforceTimeout(startedAt);
 

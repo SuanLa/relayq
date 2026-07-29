@@ -2,6 +2,7 @@ package com.suanla.relayq.core.handler;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
@@ -10,14 +11,23 @@ import java.util.Objects;
 @Slf4j
 public class TaskContext {
 
+    @Getter
     private final long taskId;
+    @Getter
     private final String bizKey;
+    @Getter
     private final String handlerName;
+    @Getter
     private final String rawParams;
+    @Getter
     private final String traceId;
+    @Getter
     private final int attemptNo;
+    @Getter
     private final int retryCount;
+    @Getter
     private final int maxRetry;
+    @Getter
     private final LocalDateTime scheduledTime;
     private final ObjectMapper objectMapper;
 
@@ -65,41 +75,5 @@ public class TaskContext {
                     ex);
             throw new ParamDeserializationException(type, ex);
         }
-    }
-
-    public long getTaskId() {
-        return taskId;
-    }
-
-    public String getBizKey() {
-        return bizKey;
-    }
-
-    public String getHandlerName() {
-        return handlerName;
-    }
-
-    public String getRawParams() {
-        return rawParams;
-    }
-
-    public String getTraceId() {
-        return traceId;
-    }
-
-    public int getAttemptNo() {
-        return attemptNo;
-    }
-
-    public int getRetryCount() {
-        return retryCount;
-    }
-
-    public int getMaxRetry() {
-        return maxRetry;
-    }
-
-    public LocalDateTime getScheduledTime() {
-        return scheduledTime;
     }
 }

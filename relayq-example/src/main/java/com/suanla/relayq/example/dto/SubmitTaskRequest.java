@@ -10,7 +10,6 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
-// Web 层必须使用 Boot 4 MVC 采用的 tools.jackson，core 内部仍使用 com.fasterxml.jackson 处理字符串参数。
 @Data
 public class SubmitTaskRequest {
 

@@ -4,6 +4,7 @@ import com.suanla.relayq.core.config.RelayqProperties;
 import com.suanla.relayq.core.executor.NamedThreadFactory;
 import com.suanla.relayq.core.metrics.PoolMetricsSource;
 import com.suanla.relayq.core.metrics.RelayqMetrics;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.LinkedHashMap;
@@ -21,6 +22,7 @@ public class SnapshotAdmission
 
     private static final int MAX_TRACKED_ENTRIES = 10_000;
 
+    @Getter
     private final boolean enabled;
     private final SnapshotCollector collector;
     private final SnapshotWriter writer;
@@ -105,10 +107,6 @@ public class SnapshotAdmission
 
     public void triggerManual(Long taskId, Integer attemptNo) {
         admit(SnapshotTrigger.manual(taskId, attemptNo));
-    }
-
-    public boolean isEnabled() {
-        return enabled;
     }
 
     @Override
