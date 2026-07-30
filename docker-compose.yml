@@ -2,15 +2,17 @@
 #
 #   docker compose up -d
 #
-# MySQL 与两个 RelayQ 应用实例共享同一任务库，用于验证多实例并发下零重复执行。
+# MySQL 主从节点与两个 RelayQ 应用实例共享同一任务库，用于验证多实例并发下零重复执行。
 
 services:
-  mysql:
-    image: mysql:8.4
-    container_name: relayq-mysql
+  mysql-master:
+    image: mysql:8.0
+    container_name: relayq-mysql-master
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: relayq
+      MYSQL_ROOT_PASSWORD: root123456
+      MYSQL_REPL_USER: repl
+      MYSQL_REPL_PASSWORD: repl123456
       MYSQL_DATABASE: relayq
       MYSQL_USER: relayq
       MYSQL_PASSWORD: relayq
@@ -18,8 +20,18 @@ services:
     ports:
       - "3306:3306"
     command:
+      - --server-id=1
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --innodb-buffer-pool-size=2G
+      - --innodb-log-file-size=256M
+      - --max-connections=300
       - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_0900_ai_ci
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --skip-name-resolve
       # 刻意不设 --transaction-isolation=READ-COMMITTED。
       # 服务端保持 MySQL 默认的 REPEATABLE READ，由应用在拉取事务上显式声明 RC。
       # 两个理由：
@@ -37,6 +49,59 @@ services:
       timeout: 5s
       retries: 20
       start_period: 20s
+    deploy:
+      resources:
+        reservations:
+          cpus: "0.5"
+          memory: 1G
+        limits:
+          cpus: "2.0"
+          memory: 4G
+
+  mysql-slave:
+    image: mysql:8.0
+    container_name: relayq-mysql-slave
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123456
+      MYSQL_REPL_USER: repl
+      MYSQL_REPL_PASSWORD: repl123456
+      TZ: Asia/Shanghai
+    ports:
+      - "3307:3306"
+    command:
+      - --server-id=2
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --read-only=ON
+      - --innodb-buffer-pool-size=2G
+      - --innodb-log-file-size=256M
+      - --max-connections=300
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --skip-name-resolve
+    volumes:
+      - relayq-mysql-slave-data:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot123456" ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          cpus: "0.5"
+          memory: 1G
+        limits:
+          cpus: "1.5"
+          memory: 4G
 
   relayq-app-1:
     build:
@@ -45,14 +110,14 @@ services:
     container_name: relayq-app-1
     restart: unless-stopped
     environment:
-      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/relayq?connectionTimeZone=%2B08:00&forceConnectionTimeZoneToSession=true"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql-master:3306/relayq?connectionTimeZone=%2B08:00&forceConnectionTimeZoneToSession=true"
       SPRING_DATASOURCE_USERNAME: relayq
       SPRING_DATASOURCE_PASSWORD: relayq
       RELAYQ_INSTANCE_ID: relayq-app-1
     ports:
       - "8081:8080"
     depends_on:
-      mysql:
+      mysql-master:
         condition: service_healthy
 
   relayq-app-2:
@@ -62,15 +127,16 @@ services:
     container_name: relayq-app-2
     restart: unless-stopped
     environment:
-      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/relayq?connectionTimeZone=%2B08:00&forceConnectionTimeZoneToSession=true"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql-master:3306/relayq?connectionTimeZone=%2B08:00&forceConnectionTimeZoneToSession=true"
       SPRING_DATASOURCE_USERNAME: relayq
       SPRING_DATASOURCE_PASSWORD: relayq
       RELAYQ_INSTANCE_ID: relayq-app-2
     ports:
       - "8082:8080"
     depends_on:
-      mysql:
+      mysql-master:
         condition: service_healthy
 
 volumes:
   relayq-mysql-data:
+  relayq-mysql-slave-data:
