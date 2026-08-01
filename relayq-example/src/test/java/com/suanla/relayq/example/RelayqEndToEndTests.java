@@ -239,7 +239,7 @@ class RelayqEndToEndTests {
         ResponseEntity<JsonNode> cancelled = post(
                 "/api/tasks/" + pendingId + "/cancel",
                 null);
-        assertEquals(HttpStatus.OK, pendingResponse.getStatusCode());
+        assertEquals(HttpStatus.OK, cancelled.getStatusCode());
 
         assertEquals("CANCELLED", requiredBody(cancelled).path("status").asText());
 
@@ -286,7 +286,7 @@ class RelayqEndToEndTests {
                 "/api/dead-letters/" + taskId + "/redrive",
                 request);
 
-        assertNotNull(requiredBody(first).path("status").textValue());
+        assertNotNull(requiredBody(second).path("status").textValue());
         assertEquals(
                 1,
                 count(
