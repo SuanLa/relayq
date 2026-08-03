@@ -28,9 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
-                "spring.datasource.url=jdbc:mysql://192.168.0.105:3307/relayq_e2e_test",
-                "spring.datasource.username=relayq",
-                "spring.datasource.password=relayq",
+                "spring.datasource.url=jdbc:mysql://192.168.0.107:13306/relayq_e2e_test",
+                "spring.datasource.username=root",
+                "spring.datasource.password=root123456",
                 "spring.sql.init.mode=always",
                 "spring.sql.init.schema-locations=classpath:db/schema.sql",
                 "relayq.instance-id=relayq-e2e",

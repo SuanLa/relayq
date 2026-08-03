@@ -3,9 +3,9 @@ spring:
     name: relayq
   datasource:
     # 用 +08:00 显式固定驱动解释并同步 MySQL session；数字偏移无需依赖容器内的时区表。
-    url: jdbc:mysql://localhost:3306/relayq?connectionTimeZone=%2B08:00&forceConnectionTimeZoneToSession=true
-    username: relayq
-    password: relayq
+    url: jdbc:mysql://192.168.0.107:13306/relayq?connectionTimeZone=%2B08:00&forceConnectionTimeZoneToSession=true
+    username: root
+    password: root123456
     hikari:
       # 32 个最大 worker 写并发 + puller(1) + reaper(1) + snapshot(1) + 管理 API 余量(5) = 40。
       maximum-pool-size: 40

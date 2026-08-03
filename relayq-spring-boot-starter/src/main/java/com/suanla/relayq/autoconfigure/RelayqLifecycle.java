@@ -73,7 +73,7 @@ public class RelayqLifecycle implements SmartLifecycle {
         stopSafely("workerPool", taskWorkerPool::stop);
         /*
          * workerPool 会把 shutdownNow 返回的未执行 taskId 批量交给回置池；
-         * 在关闭租约线程前排空回置池，才能把 §10 第 3 步真正落到数据库。
+         * 在关闭租约线程前排空回置池，才能把队列中尚未开始执行的任务批量回置 PENDING；已在执行的不强杀，靠租约超时兜底，真正落到数据库。
          */
         stopSafely("requeue", requeueRejectedHandler::stop);
         stopSafely("leaseReaper", leaseReaper::stop);

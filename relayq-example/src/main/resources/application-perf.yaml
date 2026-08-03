@@ -1,0 +1,7 @@
+relayq:
+  snapshot:
+    enabled: false
+
+logging:
+  level:
+    com.suanla.relayq: WARN

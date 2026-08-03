@@ -3,6 +3,7 @@ package com.suanla.relayq.core.snapshot;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.MybatisSqlSessionFactoryBuilder;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.suanla.relayq.core.TestDatabaseProperties;
 import com.suanla.relayq.core.config.RelayqProperties;
 import com.suanla.relayq.core.domain.FailureKind;
 import com.suanla.relayq.core.domain.TaskInfo;
@@ -47,18 +48,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@SpringBootTest
 /*
  * 不给容器设置 TZ；本类新增的 created_at 是纯审计时间，
  * 所有会和 NOW(3) 比较的任务与租约字段仍由数据库生成。
  */
 class SnapshotIntegrationTest {
 
-    private static final String JDBC_URL = System.getProperty(
-            "relayq.test.jdbc-url",
-            "jdbc:mysql://192.168.0.105:3307/relayq_scheduler_test");
-    private static final String USERNAME = System.getProperty("relayq.test.username", "relayq");
-    private static final String PASSWORD = System.getProperty("relayq.test.password", "relayq");
+    private static final String JDBC_URL = TestDatabaseProperties.jdbcUrl("relayq_snapshot_test");
+    private static final String USERNAME = TestDatabaseProperties.get("relayq.test.username", "root");
+    private static final String PASSWORD = TestDatabaseProperties.get("relayq.test.password", "root123456");
 
     private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator(23);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

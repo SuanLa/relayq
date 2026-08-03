@@ -2,6 +2,7 @@ package com.suanla.relayq.core.service;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.MybatisSqlSessionFactoryBuilder;
+import com.suanla.relayq.core.TestDatabaseProperties;
 import com.suanla.relayq.core.config.RelayqProperties;
 import com.suanla.relayq.core.domain.ExecuteOutcome;
 import com.suanla.relayq.core.domain.FailureKind;
@@ -46,18 +47,15 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@SpringBootTest
 /*
  * 这里刻意不给 MySQL 容器设置 TZ，让裸容器 UTC 与开发机 JVM 时区保持错位。
  * 调度与租约字段的测试造数一律使用数据库 NOW(3)，避免应用时间掩盖跨时区缺陷。
  */
 class RelayqServiceIntegrationTest {
 
-    private static final String JDBC_URL = System.getProperty(
-            "relayq.test.jdbc-url",
-            "jdbc:mysql://192.168.0.105:3307/relayq_scheduler_test");
-    private static final String USERNAME = System.getProperty("relayq.test.username", "relayq");
-    private static final String PASSWORD = System.getProperty("relayq.test.password", "relayq");
+    private static final String JDBC_URL = TestDatabaseProperties.jdbcUrl("relayq_test");
+    private static final String USERNAME = TestDatabaseProperties.get("relayq.test.username", "root");
+    private static final String PASSWORD = TestDatabaseProperties.get("relayq.test.password", "root123456");
 
     private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator(21);
 

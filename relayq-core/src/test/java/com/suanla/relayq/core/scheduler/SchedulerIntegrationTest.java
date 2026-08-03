@@ -3,6 +3,7 @@ package com.suanla.relayq.core.scheduler;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.MybatisSqlSessionFactoryBuilder;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.suanla.relayq.core.TestDatabaseProperties;
 import com.suanla.relayq.core.config.RelayqProperties;
 import com.suanla.relayq.core.domain.TaskInfo;
 import com.suanla.relayq.core.domain.TaskStatus;
@@ -69,19 +70,15 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
-
-@SpringBootTest
 /*
  * 这里刻意不给 MySQL 容器设置 TZ，让裸容器 UTC 与开发机 JVM 时区保持错位。
  * 所有参与调度和租约比较的测试数据都基于数据库 NOW(3) 生成，使本类同时承担时钟漂移回归测试。
  */
 class SchedulerIntegrationTest {
 
-    private static final String JDBC_URL = System.getProperty(
-            "relayq.test.jdbc-url",
-            "jdbc:mysql://192.168.0.105:3307/relayq_scheduler_test");
-    private static final String USERNAME = System.getProperty("relayq.test.username", "relayq");
-    private static final String PASSWORD = System.getProperty("relayq.test.password", "relayq");
+    private static final String JDBC_URL = TestDatabaseProperties.jdbcUrl("relayq_scheduler_test");
+    private static final String USERNAME = TestDatabaseProperties.get("relayq.test.username", "root");
+    private static final String PASSWORD = TestDatabaseProperties.get("relayq.test.password", "root123456");
 
     private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator(22);
 
