@@ -1,0 +1,234 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: relayq-p99-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  relayq-p99.json: |-
+    {
+      "annotations": {"list": []},
+      "description": "RelayQ performance-test P99 and saturation signals aggregated across all application Pods.",
+      "editable": true,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "Server-side latency for POST /api/tasks. Network time observed by k6 is not included.",
+          "fieldConfig": {"defaults": {"decimals": 1, "unit": "ms"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "id": 1,
+          "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [
+            {
+              "editorMode": "code",
+              "expr": "1000 * histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{namespace=\"relayq\",service=\"relayq-app\",method=\"POST\",uri=\"/api/tasks\"}[$__rate_interval])))",
+              "legendFormat": "HTTP submit P99",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "HTTP submit P99",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "Handler execution P99. Histograms from both Pods are summed before calculating the quantile.",
+          "fieldConfig": {"defaults": {"decimals": 1, "unit": "ms"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "id": 2,
+          "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [
+            {
+              "editorMode": "code",
+              "expr": "1000 * histogram_quantile(0.99, sum by (le, handler, outcome) (rate(relayq_task_execute_seconds_bucket{namespace=\"relayq\",service=\"relayq-app\"}[$__rate_interval])))",
+              "legendFormat": "{{handler}} / {{outcome}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Task execution P99",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "Database pull/claim cycle P99 across both RelayQ instances.",
+          "fieldConfig": {"defaults": {"decimals": 1, "unit": "ms"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "id": 3,
+          "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [
+            {
+              "editorMode": "code",
+              "expr": "1000 * histogram_quantile(0.99, sum by (le) (rate(relayq_pull_duration_seconds_bucket{namespace=\"relayq\",service=\"relayq-app\"}[$__rate_interval])))",
+              "legendFormat": "pull P99",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Task pull P99",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"decimals": 1, "unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "id": 4,
+          "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [
+            {
+              "editorMode": "code",
+              "expr": "sum by (status) (rate(http_server_requests_seconds_count{namespace=\"relayq\",service=\"relayq-app\",method=\"POST\",uri=\"/api/tasks\"}[$__rate_interval]))",
+              "legendFormat": "HTTP {{status}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Submit throughput",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "Backlog is a shared database value exposed by every Pod, so max is used instead of sum.",
+          "fieldConfig": {"defaults": {"decimals": 0, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+          "id": 5,
+          "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [
+            {
+              "editorMode": "code",
+              "expr": "max by (status) (relayq_task_backlog{namespace=\"relayq\",service=\"relayq-app\"})",
+              "legendFormat": "{{status}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Task backlog",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "Rejected work and lease loss/reclaim should remain at zero in a healthy no-op load test.",
+          "fieldConfig": {"defaults": {"decimals": 2, "unit": "ops"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+          "id": 6,
+          "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [
+            {
+              "editorMode": "code",
+              "expr": "sum(rate(relayq_task_rejected_total{namespace=\"relayq\",service=\"relayq-app\"}[$__rate_interval]))",
+              "legendFormat": "rejected/s",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "editorMode": "code",
+              "expr": "sum(rate(relayq_lease_lost_total{namespace=\"relayq\",service=\"relayq-app\"}[$__rate_interval]))",
+              "legendFormat": "lease lost/s",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "editorMode": "code",
+              "expr": "sum(rate(relayq_lease_reclaimed_total{namespace=\"relayq\",service=\"relayq-app\"}[$__rate_interval]))",
+              "legendFormat": "lease reclaimed/s",
+              "range": true,
+              "refId": "C"
+            },
+            {
+              "editorMode": "code",
+              "expr": "sum by (transition) (rate(relayq_task_state_persistence_failures_total{namespace=\"relayq\",service=\"relayq-app\"}[$__rate_interval]))",
+              "legendFormat": "state persist {{transition}}/s",
+              "range": true,
+              "refId": "D"
+            }
+          ],
+          "title": "Correctness anomaly rate",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "New-task submission rate per application Pod. Both Pods should remain above zero during a multi-instance load test.",
+          "fieldConfig": {"defaults": {"decimals": 1, "unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+          "id": 7,
+          "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [
+            {
+              "editorMode": "code",
+              "expr": "sum by (pod) (rate(http_server_requests_seconds_count{namespace=\"relayq\",service=\"relayq-app\",method=\"POST\",uri=\"/api/tasks\",status=\"201\"}[$__rate_interval]))",
+              "legendFormat": "{{pod}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Submit throughput by Pod",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "Compares accepted new tasks with successful handler executions. A sustained gap indicates growing work backlog.",
+          "fieldConfig": {"defaults": {"decimals": 1, "unit": "ops"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+          "id": 8,
+          "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [
+            {
+              "editorMode": "code",
+              "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"relayq\",service=\"relayq-app\",method=\"POST\",uri=\"/api/tasks\",status=\"201\"}[$__rate_interval]))",
+              "legendFormat": "submitted/s",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "editorMode": "code",
+              "expr": "sum(rate(relayq_task_execute_seconds_count{namespace=\"relayq\",service=\"relayq-app\",outcome=\"SUCCESS\"}[$__rate_interval]))",
+              "legendFormat": "executed/s",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Submit vs execution throughput",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "Active worker count and queued work per Pod and pool. A growing queue with saturated active workers identifies worker-pool pressure.",
+          "fieldConfig": {"defaults": {"decimals": 0, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 32},
+          "id": 9,
+          "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [
+            {
+              "editorMode": "code",
+              "expr": "max by (pod, pool) (relayq_pool_active{namespace=\"relayq\",service=\"relayq-app\"})",
+              "legendFormat": "{{pod}} / {{pool}} active",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "editorMode": "code",
+              "expr": "max by (pod, pool) (relayq_pool_queue_size{namespace=\"relayq\",service=\"relayq-app\"})",
+              "legendFormat": "{{pod}} / {{pool}} queued",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Worker pool active and queue",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "5s",
+      "schemaVersion": 39,
+      "tags": ["relayq", "performance", "p99"],
+      "templating": {"list": []},
+      "time": {"from": "now-15m", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "RelayQ / Performance & P99",
+      "uid": "relayq-performance-p99",
+      "version": 2
+    }

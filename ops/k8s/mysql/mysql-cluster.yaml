@@ -76,10 +76,13 @@ metadata:
   labels:
     app: mysql-master
 spec:
+  type: NodePort
   ports:
     - port: 3306
       targetPort: 3306
       name: mysql
+      protocol: TCP
+      nodePort: 30306
   selector:
     app: mysql-master
 ---
@@ -91,10 +94,13 @@ metadata:
   labels:
     app: mysql-slave
 spec:
+  type: NodePort
   ports:
     - port: 3306
       targetPort: 3306
       name: mysql
+      protocol: TCP
+      nodePort: 30307
   selector:
     app: mysql-slave
 ---

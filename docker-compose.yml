@@ -3,6 +3,7 @@
 #   docker compose up -d
 #
 # MySQL 主从节点与两个 RelayQ 应用实例共享同一任务库，用于验证多实例并发下零重复执行。
+# mysql-replication-init 会用 GTID 自动定位建立真实复制；应用会等复制线程启动后再启动。
 
 services:
   mysql-master:
@@ -103,6 +104,54 @@ services:
           cpus: "1.5"
           memory: 4G
 
+  mysql-replication-init:
+    image: mysql:8.0
+    container_name: relayq-mysql-replication-init
+    restart: "no"
+    environment:
+      MYSQL_PWD: root123456
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+      mysql-slave:
+        condition: service_healthy
+    entrypoint: [ "/bin/sh", "-ec" ]
+    command:
+      - |
+        mysql --host=mysql-master --user=root --execute="
+          CREATE USER IF NOT EXISTS 'repl'@'%'
+            IDENTIFIED WITH mysql_native_password BY 'repl123456';
+          ALTER USER 'repl'@'%'
+            IDENTIFIED WITH mysql_native_password BY 'repl123456';
+          GRANT REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'repl'@'%';
+        "
+        mysql --host=mysql-slave --user=root --execute="
+          STOP REPLICA;
+          RESET REPLICA ALL;
+          CHANGE REPLICATION SOURCE TO
+            SOURCE_HOST='mysql-master',
+            SOURCE_PORT=3306,
+            SOURCE_USER='repl',
+            SOURCE_PASSWORD='repl123456',
+            SOURCE_AUTO_POSITION=1,
+            GET_SOURCE_PUBLIC_KEY=1;
+          START REPLICA;
+        "
+        attempt=0
+        while [ "$$attempt" -lt 60 ]; do
+          status="$$(mysql --host=mysql-slave --user=root --execute='SHOW REPLICA STATUS\G')"
+          if echo "$$status" | grep -q 'Replica_IO_Running: Yes' \
+            && echo "$$status" | grep -q 'Replica_SQL_Running: Yes'; then
+            echo "MySQL GTID replication is running."
+            exit 0
+          fi
+          attempt="$$((attempt + 1))"
+          sleep 2
+        done
+        echo "MySQL replication threads did not become healthy in time." >&2
+        mysql --host=mysql-slave --user=root --execute='SHOW REPLICA STATUS\G' >&2
+        exit 1
+
   relayq-app-1:
     build:
       context: .
@@ -114,11 +163,12 @@ services:
       SPRING_DATASOURCE_USERNAME: relayq
       SPRING_DATASOURCE_PASSWORD: relayq
       RELAYQ_INSTANCE_ID: relayq-app-1
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
     ports:
       - "8081:8080"
     depends_on:
-      mysql-master:
-        condition: service_healthy
+      mysql-replication-init:
+        condition: service_completed_successfully
 
   relayq-app-2:
     build:
@@ -131,11 +181,12 @@ services:
       SPRING_DATASOURCE_USERNAME: relayq
       SPRING_DATASOURCE_PASSWORD: relayq
       RELAYQ_INSTANCE_ID: relayq-app-2
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
     ports:
       - "8082:8080"
     depends_on:
-      mysql-master:
-        condition: service_healthy
+      mysql-replication-init:
+        condition: service_completed_successfully
 
 volumes:
   relayq-mysql-data:

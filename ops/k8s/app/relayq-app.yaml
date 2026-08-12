@@ -109,7 +109,7 @@ metadata:
   labels:
     app: relayq-app
 spec:
-  type: ClusterIP
+  type: NodePort
   selector:
     app: relayq-app
   ports:
@@ -117,3 +117,4 @@ spec:
       port: 8080
       targetPort: http
       protocol: TCP
+      nodePort: 30080

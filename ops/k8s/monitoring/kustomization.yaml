@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - relayq-servicemonitor.yaml
+  - dashboards/relayq-dashboard.yaml
+  - mysql-exporters.yaml
+  - dashboards/mysql-dashboard.yaml

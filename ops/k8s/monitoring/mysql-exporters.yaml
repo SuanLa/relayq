@@ -1,0 +1,239 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysqld-exporter-master
+  namespace: monitoring
+  labels:
+    app: mysqld-exporter
+    mysql_role: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysqld-exporter
+      mysql_role: master
+  template:
+    metadata:
+      labels:
+        app: mysqld-exporter
+        mysql_role: master
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mysqld-exporter
+          image: prom/mysqld-exporter:v0.19.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --mysqld.username=relayq_exporter
+            - --mysqld.address=mysql-master.mysql.svc.cluster.local:3306
+            - --collect.binlog_size
+            - --collect.info_schema.innodb_metrics
+            - --collect.info_schema.processlist
+            - --collect.perf_schema.tablelocks
+          env:
+            - name: MYSQLD_EXPORTER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-exporter-credentials
+                  key: password
+          ports:
+            - name: metrics
+              containerPort: 9104
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: metrics
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: metrics
+            periodSeconds: 15
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysqld-exporter-master
+  namespace: monitoring
+  labels:
+    app: mysqld-exporter
+    mysql_role: master
+spec:
+  selector:
+    app: mysqld-exporter
+    mysql_role: master
+  ports:
+    - name: metrics
+      port: 9104
+      targetPort: metrics
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysqld-exporter-slave
+  namespace: monitoring
+  labels:
+    app: mysqld-exporter
+    mysql_role: slave
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysqld-exporter
+      mysql_role: slave
+  template:
+    metadata:
+      labels:
+        app: mysqld-exporter
+        mysql_role: slave
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mysqld-exporter
+          image: prom/mysqld-exporter:v0.19.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --mysqld.username=relayq_exporter
+            - --mysqld.address=mysql-slave.mysql.svc.cluster.local:3306
+            - --collect.info_schema.innodb_metrics
+            - --collect.info_schema.processlist
+            - --collect.perf_schema.tablelocks
+          env:
+            - name: MYSQLD_EXPORTER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-exporter-credentials
+                  key: password
+          ports:
+            - name: metrics
+              containerPort: 9104
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: metrics
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: metrics
+            periodSeconds: 15
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysqld-exporter-slave
+  namespace: monitoring
+  labels:
+    app: mysqld-exporter
+    mysql_role: slave
+spec:
+  selector:
+    app: mysqld-exporter
+    mysql_role: slave
+  ports:
+    - name: metrics
+      port: 9104
+      targetPort: metrics
+      protocol: TCP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mysqld-exporters
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - monitoring
+  selector:
+    matchLabels:
+      app: mysqld-exporter
+  jobLabel: app
+  targetLabels:
+    - mysql_role
+  endpoints:
+    - port: metrics
+      path: /metrics
+      scheme: http
+      interval: 5s
+      scrapeTimeout: 4s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: relayq-mysql-health
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: relayq.mysql
+      rules:
+        - alert: RelayqMySqlExporterDown
+          expr: mysql_up{job="mysqld-exporter"} != 1
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "MySQL exporter cannot query {{ $labels.mysql_role }}"
+        - alert: RelayqMySqlReplicationStopped
+          expr: |
+            mysql_slave_status_slave_io_running{mysql_role="slave"} != 1
+            or mysql_slave_status_slave_sql_running{mysql_role="slave"} != 1
+          for: 15s
+          labels:
+            severity: critical
+          annotations:
+            summary: "MySQL replication IO or SQL thread stopped"
+        - alert: RelayqMySqlReplicationLag
+          expr: mysql_slave_status_seconds_behind_master{mysql_role="slave"} > 5
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "MySQL replica lag is above 5 seconds"

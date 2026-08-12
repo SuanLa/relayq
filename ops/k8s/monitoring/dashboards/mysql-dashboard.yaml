@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: relayq-mysql-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  relayq-mysql.json: |-
+    {
+      "annotations": {"list": []},
+      "description": "RelayQ MySQL master/slave throughput, InnoDB pressure and replication continuity.",
+      "editable": true,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "Continuous Seconds_Behind_Source history; spikes remain visible after replication catches up.",
+          "fieldConfig": {"defaults": {"decimals": 1, "unit": "s"}, "overrides": []},
+          "gridPos": {"h": 7, "w": 8, "x": 0, "y": 0},
+          "id": 1,
+          "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [{"editorMode": "code", "expr": "mysql_slave_status_seconds_behind_master{mysql_role=\"slave\"}", "legendFormat": "replication lag", "range": true, "refId": "A"}],
+          "title": "Replication lag",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "Both series must stay at 1 throughout the load test.",
+          "fieldConfig": {"defaults": {"decimals": 0, "max": 1, "min": 0, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 7, "w": 8, "x": 8, "y": 0},
+          "id": 2,
+          "options": {"legend": {"calcs": ["lastNotNull", "min"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "asc"}},
+          "targets": [
+            {"editorMode": "code", "expr": "mysql_slave_status_slave_io_running{mysql_role=\"slave\"}", "legendFormat": "Replica IO", "range": true, "refId": "A"},
+            {"editorMode": "code", "expr": "mysql_slave_status_slave_sql_running{mysql_role=\"slave\"}", "legendFormat": "Replica SQL", "range": true, "refId": "B"}
+          ],
+          "title": "Replication threads",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "1 means the exporter can authenticate and query that MySQL instance.",
+          "fieldConfig": {"defaults": {"decimals": 0, "max": 1, "min": 0, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 7, "w": 8, "x": 16, "y": 0},
+          "id": 3,
+          "options": {"legend": {"calcs": ["lastNotNull", "min"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "asc"}},
+          "targets": [{"editorMode": "code", "expr": "mysql_up{job=\"mysqld-exporter\"}", "legendFormat": "{{mysql_role}}", "range": true, "refId": "A"}],
+          "title": "MySQL scrape health",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "Handler_commit is used as the transaction completion rate; rollback is shown separately.",
+          "fieldConfig": {"defaults": {"decimals": 1, "unit": "tps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 7},
+          "id": 4,
+          "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [
+            {"editorMode": "code", "expr": "rate(mysql_global_status_handlers_total{mysql_role=\"master\",handler=\"commit\"}[$__rate_interval])", "legendFormat": "commit/s", "range": true, "refId": "A"},
+            {"editorMode": "code", "expr": "rate(mysql_global_status_handlers_total{mysql_role=\"master\",handler=\"rollback\"}[$__rate_interval])", "legendFormat": "rollback/s", "range": true, "refId": "B"},
+            {"editorMode": "code", "expr": "sum(rate(mysql_global_status_commands_total{mysql_role=\"master\",command=~\"insert|update|delete|replace\"}[$__rate_interval]))", "legendFormat": "DML/s", "range": true, "refId": "C"}
+          ],
+          "title": "Master TPS and DML throughput",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "100 × (1 - physical reads / logical read requests). A falling ratio indicates the 2 GiB pool is under pressure.",
+          "fieldConfig": {"defaults": {"decimals": 3, "max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 7},
+          "id": 5,
+          "options": {"legend": {"calcs": ["lastNotNull", "min"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "asc"}},
+          "targets": [{"editorMode": "code", "expr": "100 * (1 - (rate(mysql_global_status_innodb_buffer_pool_reads[$__rate_interval]) / clamp_min(rate(mysql_global_status_innodb_buffer_pool_read_requests[$__rate_interval]), 1e-9)))", "legendFormat": "{{mysql_role}}", "range": true, "refId": "A"}],
+          "title": "InnoDB buffer pool hit ratio",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "Cumulative InnoDB row-lock waits converted to waits per second.",
+          "fieldConfig": {"defaults": {"decimals": 3, "unit": "ops"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 15},
+          "id": 6,
+          "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [{"editorMode": "code", "expr": "rate(mysql_global_status_innodb_row_lock_waits[$__rate_interval])", "legendFormat": "{{mysql_role}}", "range": true, "refId": "A"}],
+          "title": "InnoDB row lock waits/s",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"decimals": 0, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 15},
+          "id": 7,
+          "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [
+            {"editorMode": "code", "expr": "mysql_global_status_threads_connected", "legendFormat": "{{mysql_role}} connected", "range": true, "refId": "A"},
+            {"editorMode": "code", "expr": "mysql_global_status_threads_running", "legendFormat": "{{mysql_role}} running", "range": true, "refId": "B"}
+          ],
+          "title": "MySQL connections",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "Data pages divided by data + free + miscellaneous pages.",
+          "fieldConfig": {"defaults": {"decimals": 1, "max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 15},
+          "id": 8,
+          "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [{"editorMode": "code", "expr": "100 * sum by (mysql_role) (mysql_global_status_buffer_pool_pages{state=\"data\"}) / clamp_min(sum by (mysql_role) (mysql_global_status_buffer_pool_pages{state=~\"data|free|misc\"}), 1)", "legendFormat": "{{mysql_role}}", "range": true, "refId": "A"}],
+          "title": "Buffer pool utilization",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "5s",
+      "schemaVersion": 39,
+      "tags": ["relayq", "mysql", "replication", "performance"],
+      "templating": {"list": []},
+      "time": {"from": "now-15m", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "RelayQ / MySQL & Replication",
+      "uid": "relayq-mysql-replication",
+      "version": 1
+    }

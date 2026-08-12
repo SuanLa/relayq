@@ -1,0 +1,25 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: relayq-app
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - relayq
+  selector:
+    matchLabels:
+      app: relayq-app
+  jobLabel: app
+  targetLabels:
+    - app
+  podTargetLabels:
+    - app
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      scheme: http
+      interval: 5s
+      scrapeTimeout: 3s

@@ -1,0 +1,93 @@
+# Values for a single-node Docker Desktop performance-test cluster.
+# Install with release name "monitoring" so the generated Service names and
+# ServiceMonitor selector match the manifests in this directory.
+
+alertmanager:
+  enabled: false
+
+grafana:
+  defaultDashboardsTimezone: browser
+  # A single ReadWriteOnce PVC cannot be mounted by old and new Grafana Pods
+  # during RollingUpdate. Recreate trades a short UI outage for reliable upgrades.
+  deploymentStrategy:
+    type: Recreate
+  initChownData:
+      enabled: false
+  service:
+    type: NodePort
+    nodePort: 30300
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: hostpath
+    accessModes:
+      - ReadWriteOnce
+    size: 2Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+prometheus:
+  service:
+    type: ClusterIP
+  prometheusSpec:
+    retention: 7d
+    retentionSize: 8GB
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1536Mi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: hostpath
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Gi
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+# These Docker Desktop control-plane endpoints are not needed for RelayQ P99
+# and commonly appear as false "down" targets in a local cluster.
+kubeControllerManager:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
