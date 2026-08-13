@@ -204,15 +204,12 @@ relayq:
 
 ### 4. 注册 Handler
 
-实现 `TaskHandler`，将其注册为 Spring Bean，并通过 `@RelayqHandler` 声明唯一名称：
+实现 `TaskHandler`，并通过 `@RelayqHandler` 同时将其注册为 Spring Bean、声明唯一名称：
 
 ```java
 import com.suanla.relayq.core.handler.RelayqHandler;
 import com.suanla.relayq.core.handler.TaskContext;
 import com.suanla.relayq.core.handler.TaskHandler;
-import org.springframework.stereotype.Component;
-
-@Component
 @RelayqHandler("send-email")
 public class SendEmailHandler implements TaskHandler {
 

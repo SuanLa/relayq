@@ -6,10 +6,8 @@ import com.suanla.relayq.core.handler.TaskContext;
 import com.suanla.relayq.core.handler.TaskHandler;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 @Slf4j
-@Component
 @RelayqHandler("flaky-handler")
 public class FlakyHandler implements TaskHandler {
 

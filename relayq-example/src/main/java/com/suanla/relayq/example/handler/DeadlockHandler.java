@@ -6,13 +6,11 @@ import com.suanla.relayq.core.handler.TaskContext;
 import com.suanla.relayq.core.handler.TaskHandler;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
-@Component
 @RelayqHandler("deadlock-handler")
 public class DeadlockHandler implements TaskHandler {
 

@@ -3,6 +3,7 @@ package com.suanla.relayq.autoconfigure;
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusProperties;
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.suanla.relayq.autoconfigure.fixture.ScannedHandler;
 import com.suanla.relayq.core.config.RelayqProperties;
 import com.suanla.relayq.core.executor.RequeueRejectedHandler;
 import com.suanla.relayq.core.executor.TaskDispatcher;
@@ -40,6 +41,7 @@ import org.springframework.boot.actuate.autoconfigure.metrics.MetricsAutoConfigu
 import org.springframework.boot.actuate.autoconfigure.metrics.export.simple.SimpleMetricsExportAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -146,6 +148,18 @@ class RelayqAutoConfigurationTest {
                             .containsSame(context.getBean("directHandler", TaskHandler.class));
                     assertThat(registry.find("proxied"))
                             .containsSame(context.getBean("proxiedHandler", TaskHandler.class));
+                });
+    }
+
+    @Test
+    void discoversHandlerThroughRelayqHandlerComponentStereotype() {
+        contextRunner
+                .withUserConfiguration(ScannedHandlerConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasSingleBean(ScannedHandler.class);
+                    assertThat(context).hasBean("scanned-handler");
+                    assertThat(context.getBean(HandlerRegistry.class).find("scanned-handler"))
+                            .containsSame(context.getBean(ScannedHandler.class));
                 });
     }
 
@@ -275,6 +289,11 @@ class RelayqAutoConfigurationTest {
             proxyFactory.setInterfaces(TaskHandler.class);
             return (TaskHandler) proxyFactory.getProxy();
         }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ComponentScan(basePackageClasses = ScannedHandler.class)
+    static class ScannedHandlerConfiguration {
     }
 
     @Configuration(proxyBeanMethods = false)
