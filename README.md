@@ -88,7 +88,7 @@ stateDiagram-v2
 
 ### 1. 启动双实例示例
 
-仓库内的 Compose 配置会启动 MySQL 8.4，以及两个共享同一任务库的 RelayQ 实例：
+仓库内的 Compose 配置会启动 MySQL 8.0 GTID 主从，以及两个共享主库的 RelayQ 实例：
 
 ```bash
 docker compose up --build -d
@@ -99,7 +99,8 @@ docker compose ps
 | --- | --- | --- |
 | `relayq-app-1` | <http://localhost:8081> | 示例应用实例 1 |
 | `relayq-app-2` | <http://localhost:8082> | 示例应用实例 2 |
-| `mysql` | `localhost:3306` | 数据库 `relayq`，用户名与密码均为 `relayq` |
+| `mysql-master` | `localhost:3306` | 主库 `relayq`，用户名与密码均为 `relayq` |
+| `mysql-slave` | `localhost:3307` | ROW binlog + GTID 只读从库 |
 
 ### 2. 检查应用状态
 
@@ -302,7 +303,7 @@ relayq
 ├── relayq-core                 # 状态机、抢占执行、租约、重试、死信、快照与指标
 ├── relayq-spring-boot-starter  # 自动配置、属性绑定、Bean 装配与生命周期管理
 ├── relayq-example              # 可运行示例、管理 API 与示例 Handler
-└── docs                        # 架构决策与实现约束
+└── ops                         # Kubernetes 配置、MySQL 初始化脚本与示例数据
 ```
 
 ## 🧪 构建与测试
@@ -322,7 +323,7 @@ mvn -pl relayq-example -am package
 本地运行示例：
 
 ```bash
-docker compose up -d mysql
+docker compose up -d mysql-master mysql-slave mysql-replication-init
 java -jar relayq-example/target/relayq-example-0.0.1-SNAPSHOT.jar
 ```
 
@@ -334,8 +335,6 @@ java -jar relayq-example/target/relayq-example-0.0.1-SNAPSHOT.jar
 - 延迟精度受数据库轮询间隔影响，不适合亚秒级定时。
 - 当前数据模型未分片，长期运行时需要规划归档或冷热分离。
 - 项目暂不包含管理控制台，`relayq-example` 仅提供 REST API。
-
-更多设计细节、并发边界与技术取舍请阅读 [架构设计文档](docs/architecture.md)。
 
 ## 📄 License
 

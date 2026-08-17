@@ -19,5 +19,19 @@
 3. 按 `k8s/monitoring/README.md` 安装监控栈和 MySQL exporter。
 4. 按 `perf/README.md` 造数、预热、执行 k6 阶梯压测并验证结果。
 
+## 本地镜像部署
+
+Docker Desktop Kubernetes 使用独立的 containerd 镜像存储。应用已部署后，可用一条命令完成
+镜像构建、节点导入和滚动更新：
+
+```powershell
+.\ops\k8s\app\deploy-desktop-docker.ps1 -ConfirmTarget
+```
+
+这条命令需要在 Docker Desktop Kubernetes 所在的 Windows 机器执行。推荐开发机推送代码、
+Kubernetes 机器执行 `git pull` 后运行脚本，从而只同步源码增量，不再跨机器复制镜像包。
+
+完整参数和行为见 [`k8s/app/README.md`](k8s/app/README.md)。
+
 不要在包含重要数据的数据库上运行 `perf/seed/` 下的脚本。Kubernetes 写入脚本只有显式传入
 `-ConfirmTarget` 才会开始写数据。
