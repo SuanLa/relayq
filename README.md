@@ -15,7 +15,7 @@
 
 **只需 MySQL · 支持水平扩展 · 开箱即用的 Spring Boot Starter**
 
-[快速开始](#-快速开始) · [接入指南](#-接入-spring-boot) · [配置参考](#-常用配置) · [架构设计](docs/architecture.md)
+[快速开始](#-快速开始) · [接入指南](#-接入-spring-boot) · [配置参考](#-常用配置)
 
 </div>
 
