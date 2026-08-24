@@ -200,22 +200,125 @@ curl.exe -i --noproxy "*" http://192.168.0.107:18080/actuator/health
 避免低 QPS、单活跃 VU 的冒烟测试长期固定在同一个 Pod；Pod 间不要求严格 50/50，
 但压测期间两个 Pod 的请求速率都应大于零。
 
-先以较低速率验证，再逐级增加到系统出现明显排队或 P99 超过目标：
+开发机使用 Docker 运行 k6。包装脚本会自动生成并打印 `RUN_ID`，预分配全部 VU，
+避免测试过程中动态增加 VU，并把参数、UTC 起止时间和完整控制台输出保存在
+`ops/perf/results/`：
 
 ```powershell
-k6 run `
-  -e BASE_URLS=http://localhost:8081,http://localhost:8082 `
-  -e RATE=1000 `
-  -e DURATION=2m `
-  -e PRE_ALLOCATED_VUS=100 `
-  -e MAX_VUS=1000 `
-  -e P99_MS=1000 `
-  .\ops\perf\k6\submit-load.js
+.\ops\perf\k6\run-docker.ps1 `
+  -BaseUrls http://192.168.0.107:18080 `
+  -Rate 150 `
+  -Duration 5m `
+  -PreAllocatedVUs 300 `
+  -MaxVUs 300 `
+  -P99Millis 1000
 ```
 
 脚本使用 `constant-arrival-rate`，在两个实例间轮询提交，默认阈值是失败率低于 1%、
 检查成功率高于 99%、HTTP P99 小于 1 秒。每轮可以显式指定不同的 `RUN_ID`，避免
 `biz_key` 与历史轮次冲突。
+
+每轮结束后不要手工拼接多行 SQL。使用只读验收脚本按 `RUN_ID` 同时检查任务终态、
+重试次数、attempt、执行审计，并等待从库追平后比较主从汇总：
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+
+.\ops\perf\verify\verify-load-run-k8s.ps1 `
+  -Context docker-desktop `
+  -RunId warm150-20260813-010222 `
+  -ExpectedRows 45000 `
+  -TimeoutSeconds 600
+```
+
+脚本只执行查询，不会修改或清空任务。只有全部任务为 `SUCCESS`、`retry_count=0`、
+`current_attempt_no=1`，每条任务恰好存在一条 `SUCCESS/attempt 1` 审计，并且从库追平
+后的汇总与主库一致时才返回 `VERDICT: PASSED`。Prometheus 中的
+`relayq.lease.reclaimed`、`relayq.lease.lost` 和 `relayq.task.rejected` 增量仍需同时为零。
+
+### 保留 MySQL 死锁与应用日志现场
+
+容量复测不能只保留 k6 汇总。先在 Kubernetes 部署机启动只读观测脚本，并让它覆盖
+完整压测窗口以及任务租约过期后的观察时间：
+
+```powershell
+.\ops\perf\observe\capture-deadlock-evidence-k8s.ps1 `
+  -Context docker-desktop `
+  -RunId baseline150-20260823-120000 `
+  -DurationSeconds 480 `
+  -PollSeconds 5
+```
+
+看到 `Start k6 now` 后，立即在开发机以同一个 `RUN_ID` 启动 k6：
+
+```powershell
+.\ops\perf\k6\run-docker.ps1 `
+  -BaseUrls http://192.168.0.107:18080 `
+  -Rate 150 `
+  -Duration 5m `
+  -PreAllocatedVUs 300 `
+  -MaxVUs 300 `
+  -P99Millis 1000 `
+  -RunId baseline150-20260823-120000
+```
+
+观测脚本不会修改任务、租约或 MySQL 配置。证据保存在
+`ops/perf/results/<RUN_ID>-evidence/`，包括：
+
+- Deployment、ReplicaSet、Pod、实际镜像及 image ID；
+- `Innodb_deadlocks` 的起止值和轮询时间序列；
+- 死锁计数增长时立即抓取的 `SHOW ENGINE INNODB STATUS`；
+- 观察窗口结束时的 InnoDB 状态、应用 Pod 日志和 Kubernetes 事件。
+
+最后再运行 `verify-load-run-k8s.ps1`。只有 k6、任务/审计正确性、MySQL 死锁增量、
+租约异常指标四组证据都齐全，才能判断一次容量测试通过或定位其失败原因。
+
+### 定向验证租约回收锁顺序
+
+正常 no-op 压测中如果没有租约过期，`Innodb_deadlocks` 增量为零并不能证明 Reaper
+的新 SQL 路径已经被执行。标准 150 QPS 回归通过后，可在测试环境单独运行受控故障
+注入。脚本只创建并修改本轮 `reaperprobe-*` 前缀的 `slow-handler` 任务，不删除任务，
+也不修改千万基线数据。
+
+先在 Kubernetes 机器的第一个 PowerShell 窗口启动证据采集：
+
+```powershell
+$runId = "reaperprobe-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+$runId
+
+.\ops\perf\observe\capture-deadlock-evidence-k8s.ps1 `
+  -Context docker-desktop `
+  -RunId $runId `
+  -DurationSeconds 120 `
+  -PollSeconds 2
+```
+
+看到 `Start k6 now` 后，不需要运行 k6；在同一台机器的第二个 PowerShell 窗口设置
+完全相同的 `$runId`，再执行：
+
+```powershell
+.\ops\perf\observe\exercise-lease-reaper-k8s.ps1 `
+  -Context docker-desktop `
+  -RunId $runId `
+  -BaseUrl http://127.0.0.1:18080 `
+  -TaskCount 64 `
+  -SleepMillis 10000 `
+  -ForceDurationSeconds 15 `
+  -ConfirmTarget
+```
+
+脚本通过 HTTP 创建慢任务，然后反复按升序主键、仅对本轮仍为 `RUNNING` 的任务把
+租约改为过期。这样 Reaper 必须与 worker 终态更新真实并发，同时故障注入本身不会
+重新引入“二级索引先于主键”的锁顺序。验收条件：
+
+- `Forced lease rows > 0`，证明故障确实注入；
+- `Reaper transitions > 0`，证明至少有任务真正经过回收路径；
+- 注入脚本与证据目录中的 `Deadlock delta` 都为 `0`；
+- 两个应用 Pod 和 MySQL 复制线程保持运行。
+
+这个场景故意制造租约丢失和再次抢占，因此 `current_attempt_no > 1`、`LEASE_LOST`
+以及 `relayq.lease.reclaimed` 增长属于预期现象，不能使用正常 no-op 轮次的
+`verify-load-run-k8s.ps1` 恰好一次标准判定它。
 
 一千万条基线数据应使用数据库造数脚本完成。不要把“通过 HTTP 提交一千万次”当成
 第一次测试；例如 5,000 QPS 也需要约 33 分钟，而且会同时产生执行日志与复制流量。

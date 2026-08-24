@@ -4,6 +4,18 @@
 Kubernetes 的 Windows 机器上执行，并且该机器需要有一份当前项目源码。开发机只需提交并推送
 代码，Kubernetes 机器拉取代码后运行本脚本，不再手工搬运镜像 tar。
 
+部署前先运行只读基线检查。它会输出应用实际镜像和 imageID、profile、资源、Pod 重启数、
+MySQL/监控组件状态，并检查主从复制线程、延迟和错误：
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+
+.\ops\k8s\app\inspect-runtime-baseline.ps1 `
+  -Context docker-desktop
+```
+
+只有输出 `BASELINE: PASSED` 才开始更新镜像。该脚本不会修改 Kubernetes 或数据库。
+
 它把原来的手工步骤封装为：
 
 1. 使用 `relayq-example/Dockerfile` 构建镜像。

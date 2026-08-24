@@ -10,14 +10,15 @@ COPY relayq-core/src relayq-core/src
 COPY relayq-spring-boot-starter/src relayq-spring-boot-starter/src
 COPY relayq-example/src relayq-example/src
 
-RUN mvn -B -pl relayq-example -am -DskipTests package
+RUN mvn -B -pl relayq-example -am -DskipTests package \
+    && cp relayq-example/target/relayq-example-*.jar /workspace/app.jar
 
 FROM eclipse-temurin:21-jre-alpine
 
 RUN addgroup -S relayq && adduser -S relayq -G relayq
 
 WORKDIR /app
-COPY --from=build /workspace/relayq-example/target/relayq-example-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=build /workspace/app.jar app.jar
 
 USER relayq
 EXPOSE 8080

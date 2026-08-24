@@ -13,6 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -28,9 +29,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
-                "spring.datasource.url=jdbc:mysql://192.168.0.107:13306/relayq_e2e_test",
-                "spring.datasource.username=root",
-                "spring.datasource.password=root123456",
                 "spring.sql.init.mode=always",
                 "spring.sql.init.schema-locations=classpath:db/schema.sql",
                 "relayq.instance-id=relayq-e2e",
@@ -50,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
                 "relayq.snapshot.collect-timeout-ms=1000",
                 "relayq.metrics.backlog-cache-seconds=1"
         })
+@ActiveProfiles("e2e")
 @TestMethodOrder(MethodOrderer.MethodName.class)
 // Web 端到端测试必须使用 Boot 4 MVC 采用的 tools.jackson，core 内部仍保留 com.fasterxml.jackson。
 /*
