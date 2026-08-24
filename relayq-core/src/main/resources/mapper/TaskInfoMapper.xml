@@ -151,16 +151,28 @@
           AND lease_owner = #{owner}
     </update>
 
-    <update id="reclaimExpiredLeases">
-        UPDATE task_info
+
+    <select id="selectExpiredLeaseIds" resultType="java.lang.Long">
+        SELECT id
+        FROM task_info FORCE INDEX (idx_status_lease)
+        WHERE status = 'RUNNING'
+            AND lease_expire_time &lt; NOW(3)
+        ORDER BY lease_expire_time
+        LIMIT #{limit}
+    </select>
+
+    <update id="reclaimExpiredLeasesByIds">
+        UPDATE task_info FORCE INDEX (PRIMARY)
         SET status = 'PENDING',
             lease_owner = NULL,
             lease_expire_time = NULL,
             updated_at = NOW(3)
-        WHERE status = 'RUNNING'
+        WHERE id IN
+            <foreach collection="ids" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+          AND status = 'RUNNING'
           AND lease_expire_time &lt; NOW(3)
-        ORDER BY lease_expire_time
-        LIMIT #{limit}
     </update>
 
     <update id="renewLease">

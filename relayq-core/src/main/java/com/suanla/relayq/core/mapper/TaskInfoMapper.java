@@ -44,7 +44,9 @@ public interface TaskInfoMapper extends BaseMapper<TaskInfo> {
 
     int requeueRejected(@Param("ids") Collection<Long> ids, @Param("owner") String owner);
 
-    int reclaimExpiredLeases(@Param("limit") int limit);
+    List<Long> selectExpiredLeaseIds(@Param("limit") int limit);
+
+    int reclaimExpiredLeasesByIds(@Param("ids") Collection<Long> ids);
 
     int renewLease(
             @Param("ids") Collection<Long> ids,

@@ -6,6 +6,7 @@ import com.suanla.relayq.core.mapper.TaskInfoMapper;
 import com.suanla.relayq.core.metrics.RelayqMetrics;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -61,7 +62,13 @@ public class LeaseReaper implements AutoCloseable {
     }
 
     public int reapOnce() {
-        int affected = taskInfoMapper.reclaimExpiredLeases(batchSize);
+        List<Long> expiredLeaseIds = taskInfoMapper.selectExpiredLeaseIds(batchSize);
+        if (expiredLeaseIds.isEmpty()) {
+            return 0;
+        }
+        expiredLeaseIds.sort(Long::compareTo);
+
+        int affected = taskInfoMapper.reclaimExpiredLeasesByIds(expiredLeaseIds);
         if (affected > 0) {
             metrics.recordLeaseReclaimed(affected);
             log.info("Expired leases reclaimed: count={}", affected);
