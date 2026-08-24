@@ -16,6 +16,10 @@ public final class TraceContext {
         return UUID.randomUUID().toString().replace("-", "");
     }
 
+    public static String currentTraceId() {
+        return MDC.get(TRACE_ID_KEY);
+    }
+
     public static void put(String traceId) {
         MDC.put(TRACE_ID_KEY, Objects.requireNonNull(traceId, "traceId must not be null"));
     }

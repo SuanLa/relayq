@@ -99,17 +99,48 @@ class TaskWorkerPoolTest {
         PoolFixture fixture = fixture(1, 1, 1);
         assertEquals(2, fixture.pool().tryReserve(2));
         fixture.pool().stop();
+        AtomicInteger discarded = new AtomicInteger();
         List<TaskIdentifiedRunnable> tasks = List.of(
                 new TaskExecutionRunnable(101L, () -> {
-                }),
+                }, discarded::incrementAndGet),
                 new TaskExecutionRunnable(102L, () -> {
-                }));
+                }, discarded::incrementAndGet));
 
         assertEquals(0, fixture.pool().submitReservedBatch(tasks));
 
         awaitReservations(fixture.pool(), 0);
+        assertEquals(2, discarded.get());
         verify(fixture.stateMachine(), timeout(2_000).times(1))
                 .requeueRejected(anyCollection(), eq("test-owner"));
+    }
+
+    @Test
+    void shutdownDiscardsQueuedTaskBeforeRequeueingIt() throws Exception {
+        PoolFixture fixture = fixture(1, 1, 1);
+        assertEquals(2, fixture.pool().tryReserve(2));
+        CountDownLatch firstStarted = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        AtomicInteger discarded = new AtomicInteger();
+        List<TaskIdentifiedRunnable> tasks = List.of(
+                new TaskExecutionRunnable(201L, () -> {
+                    firstStarted.countDown();
+                    try {
+                        releaseFirst.await();
+                    } catch (InterruptedException error) {
+                        Thread.currentThread().interrupt();
+                    }
+                }),
+                new TaskExecutionRunnable(202L, () -> {
+                }, discarded::incrementAndGet));
+
+        assertEquals(2, fixture.pool().submitReservedBatch(tasks));
+        assertTrue(firstStarted.await(2, TimeUnit.SECONDS));
+
+        assertEquals(List.of(202L), fixture.pool().stop());
+        assertEquals(1, discarded.get());
+        verify(fixture.stateMachine(), timeout(2_000).times(1))
+                .requeueRejected(eq(List.of(202L)), eq("test-owner"));
+        releaseFirst.countDown();
     }
 
     private PoolFixture fixture(int coreSize, int maxSize, int queueCapacity) {

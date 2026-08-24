@@ -14,6 +14,10 @@ import java.util.concurrent.locks.ReentrantLock;
 public class CoalescingTaskAvailabilitySignal implements TaskAvailabilitySignal {
 
     private final ReentrantLock lock = new ReentrantLock();
+    /**
+     * Object.wait(long, int) 在 JDK 21 中并不是真正的纳秒级等待，而且超时后需要重新竞争对象监视器；
+     * Condition.awaitNanos() 提供了更合适的纳秒超时计算和剩余时间语义。
+     */
     private final Condition changed = lock.newCondition();
 
     private volatile long generation;

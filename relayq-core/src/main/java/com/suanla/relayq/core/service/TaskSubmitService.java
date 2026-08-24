@@ -147,7 +147,8 @@ public class TaskSubmitService {
                 ? properties.getRetry().getDefaultMaxRetry()
                 : cmd.maxRetry());
         task.setCurrentAttemptNo(0);
-        task.setTraceId(TraceContext.generateTraceId());
+        String ambient = TraceContext.currentTraceId();
+        task.setTraceId(Objects.isNull(ambient) || ambient.isBlank() ? TraceContext.generateTraceId() : ambient);
         return task;
     }
 

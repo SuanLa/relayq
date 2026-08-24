@@ -99,6 +99,24 @@ management:
     web:
       exposure:
         include: health,info,metrics,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      # Always publish aggregable buckets when Prometheus monitoring is enabled.
+      # The perf profile must not be required merely to observe P99.
+      percentiles-histogram:
+        http.server.requests: true
+        relayq.pull.duration: true
+        relayq.task.execute: true
+      minimum-expected-value:
+        http.server.requests: 1ms
+        relayq.pull.duration: 1ms
+        relayq.task.execute: 1ms
+      maximum-expected-value:
+        http.server.requests: 10s
+        relayq.pull.duration: 10s
+        relayq.task.execute: 30s
 
 logging:
   pattern:
