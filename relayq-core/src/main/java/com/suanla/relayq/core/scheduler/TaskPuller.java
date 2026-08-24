@@ -5,7 +5,6 @@ import com.suanla.relayq.core.domain.TaskInfo;
 import com.suanla.relayq.core.domain.TaskStatus;
 import com.suanla.relayq.core.executor.NamedThreadFactory;
 import com.suanla.relayq.core.executor.TaskDispatcher;
-import com.suanla.relayq.core.executor.TaskExecutionRunnable;
 import com.suanla.relayq.core.executor.TaskIdentifiedRunnable;
 import com.suanla.relayq.core.executor.TaskWorkerPool;
 import com.suanla.relayq.core.mapper.TaskInfoMapper;
@@ -212,9 +211,7 @@ public class TaskPuller implements AutoCloseable {
 
         List<TaskIdentifiedRunnable> commands = new ArrayList<>(tasks.size());
         for (TaskInfo task : tasks) {
-            commands.add(new TaskExecutionRunnable(
-                    task.getId(),
-                    () -> dispatcher.dispatch(task)));
+            commands.add(dispatcher.prepare(task));
         }
         workerPool.submitReservedBatch(commands);
         return PullAttempt.claimed(tasks.size());

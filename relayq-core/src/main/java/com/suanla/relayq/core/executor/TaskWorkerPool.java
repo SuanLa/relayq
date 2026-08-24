@@ -210,6 +210,7 @@ public class TaskWorkerPool implements PoolMetricsSource, AutoCloseable {
                 reservedRunnable.releaseWithoutRunning();
                 taskIds.add(reservedRunnable.getTaskId());
             } else if (runnable instanceof TaskIdentifiedRunnable taskRunnable) {
+                taskRunnable.discard();
                 taskIds.add(taskRunnable.getTaskId());
             }
         }
@@ -254,7 +255,9 @@ public class TaskWorkerPool implements PoolMetricsSource, AutoCloseable {
             }
             List<Long> rejectedIds = new ArrayList<>(tasks.size() - index);
             for (int current = index; current < tasks.size(); current++) {
-                rejectedIds.add(tasks.get(current).getTaskId());
+                TaskIdentifiedRunnable rejectedTask = tasks.get(current);
+                rejectedTask.discard();
+                rejectedIds.add(rejectedTask.getTaskId());
             }
             // 当前被拒任务与尚未提交任务的许可在同一处归还，保证首拒即熔断整批。
             releaseReservations(rejectedIds.size());
@@ -300,6 +303,7 @@ public class TaskWorkerPool implements PoolMetricsSource, AutoCloseable {
         }
 
         private void releaseWithoutRunning() {
+            delegate.discard();
             releaseOne();
         }
 

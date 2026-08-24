@@ -110,12 +110,26 @@ public class TaskDispatcher {
     }
 
     public void dispatch(TaskInfo task) {
-        Objects.requireNonNull(task, "task must not be null");
-        Objects.requireNonNull(task.getId(), "task.id must not be null");
-        Objects.requireNonNull(
-                task.getCurrentAttemptNo(), "task.currentAttemptNo must not be null");
-        Objects.requireNonNull(task.getRetryCount(), "task.retryCount must not be null");
-        Objects.requireNonNull(task.getMaxRetry(), "task.maxRetry must not be null");
+
+        validateTask(task);
+        leaseRenewer.register(task.getId());
+        dispatchRegistered(task);
+    }
+
+    /**
+     * Registers a claimed attempt before it can wait in the worker queue.
+     * A command discarded without running releases the same registration.
+     */
+    public TaskIdentifiedRunnable prepare(TaskInfo task) {
+        validateTask(task);
+        leaseRenewer.register(task.getId());
+        return new TaskExecutionRunnable(
+                task.getId(),
+                () -> dispatchRegistered(task),
+                () -> leaseRenewer.unregister(task.getId()));
+    }
+
+    private void dispatchRegistered(TaskInfo task) {
         String traceId = task.getTraceId();
         if (traceId == null || traceId.isBlank()) {
             traceId = TraceContext.generateTraceId();
@@ -123,7 +137,6 @@ public class TaskDispatcher {
         LocalDateTime startTime = LocalDateTime.now(clock);
         long startedAtNanos = System.nanoTime();
         String executeOutcome = "FAILED";
-        leaseRenewer.register(task.getId());
         TraceContext.put(traceId);
         try {
             try {
@@ -168,6 +181,15 @@ public class TaskDispatcher {
                     executeOutcome,
                     System.nanoTime() - startedAtNanos);
         }
+    }
+
+    private void validateTask(TaskInfo task) {
+        Objects.requireNonNull(task, "task must not be null");
+        Objects.requireNonNull(task.getId(), "task.id must not be null");
+        Objects.requireNonNull(
+                task.getCurrentAttemptNo(), "task.currentAttemptNo must not be null");
+        Objects.requireNonNull(task.getRetryCount(), "task.retryCount must not be null");
+        Objects.requireNonNull(task.getMaxRetry(), "task.maxRetry must not be null");
     }
 
     private Failure executeHandler(TaskInfo task, String traceId) throws InterruptedException {

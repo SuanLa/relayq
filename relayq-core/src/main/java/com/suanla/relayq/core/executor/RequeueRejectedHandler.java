@@ -91,6 +91,7 @@ public class RequeueRejectedHandler
                 return;
             }
             if (runnable instanceof TaskIdentifiedRunnable taskRunnable) {
+                taskRunnable.discard();
                 requeueAsync(List.of(taskRunnable.getTaskId()));
                 return;
             }
