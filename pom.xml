@@ -9,9 +9,9 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
 
-    <groupId>com.suanla</groupId>
+    <groupId>io.github.suanla</groupId>
     <artifactId>relayq-parent</artifactId>
-    <version>0.0.1</version>
+    <version>0.1.0</version>
     <packaging>pom</packaging>
 
     <name>relayq-parent</name>
@@ -30,14 +30,14 @@
     <developers>
         <developer>
             <id>suanla</id>
-            <name>&lt;SuanLa&gt;</name>
+            <name>SuanLa</name>
             <email>hzy193432@gmail.com</email>
         </developer>
     </developers>
 
     <scm>
-        <url>https://github.com/&lt;SuanLa&gt;/relayq</url>
-        <connection>scm:git:https://github.com/&lt;SuanLa&gt;/relayq.git</connection>
+        <url>https://github.com/SuanLa/relayq</url>
+        <connection>scm:git:https://github.com/SuanLa/relayq.git</connection>
     </scm>
 
     <modules>
@@ -61,12 +61,12 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
-                <groupId>com.suanla</groupId>
+                <groupId>io.github.suanla</groupId>
                 <artifactId>relayq-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.suanla</groupId>
+                <groupId>io.github.suanla</groupId>
                 <artifactId>relayq-spring-boot-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -115,4 +115,61 @@
         </plugins>
     </build>
 
+    <profiles>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals><goal>jar-no-fork</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.11.2</version>
+                        <configuration>
+                            <encoding>UTF-8</encoding>
+                            <docencoding>UTF-8</docencoding>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals><goal>jar</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.8</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals><goal>sign</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.9.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>false</autoPublish>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

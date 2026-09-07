@@ -152,7 +152,7 @@ docker compose down -v
 
 ## 🔌 接入 Spring Boot
 
-当前项目版本为 `0.0.1-SNAPSHOT`。在发布到制品仓库前，先在源码根目录执行：
+当前项目 发布 `0.1.0`。在发布到制品仓库前，先在源码根目录执行：
 
 ```bash
 mvn clean install
@@ -162,9 +162,9 @@ mvn clean install
 
 ```xml
 <dependency>
-    <groupId>com.suanla</groupId>
+    <groupId>io.github.suanla</groupId>
     <artifactId>relayq-spring-boot-starter</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.1.0</version>
 </dependency>
 ```
 
@@ -325,7 +325,7 @@ mvn -pl relayq-example -am package
 
 ```bash
 docker compose up -d mysql-master mysql-slave mysql-replication-init
-java -jar relayq-example/target/relayq-example-0.0.1-SNAPSHOT.jar
+java -jar relayq-example/target/relayq-example-0.1.0.jar
 ```
 
 ## 📋 容量测试报告
