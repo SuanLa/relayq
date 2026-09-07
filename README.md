@@ -17,6 +17,8 @@
 
 [快速开始](#-快速开始) · [接入指南](#-接入-spring-boot) · [配置参考](#-常用配置)
 
+**0.1.0 发布说明 / Release notes：** [中文](docs/releases/0.1.0.zh-CN.md) · [English](docs/releases/0.1.0.en.md)
+
 </div>
 
 ---
