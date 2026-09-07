@@ -69,5 +69,5 @@ public interface TaskInfoMapper extends BaseMapper<TaskInfo> {
 
     long countByStatus(@Param("status") TaskStatus status);
 
-    List<TaskStatusCount> countGroupedByStatus();
+    List<TaskStatusCount> countActionableBacklog();
 }

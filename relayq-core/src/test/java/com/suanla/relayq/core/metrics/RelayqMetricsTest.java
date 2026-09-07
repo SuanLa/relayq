@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class RelayqMetricsTest {
 
@@ -29,6 +30,12 @@ class RelayqMetricsTest {
         assertEquals(7.0D, backlogGauge(registry, TaskStatus.PENDING));
         assertEquals(2.0D, backlogGauge(registry, TaskStatus.DEAD));
         assertEquals(0.0D, backlogGauge(registry, TaskStatus.RUNNING));
+        assertNull(registry.find("relayq.task.backlog")
+                .tag("status", TaskStatus.SUCCESS.name())
+                .gauge());
+        assertNull(registry.find("relayq.task.backlog")
+                .tag("status", TaskStatus.CANCELLED.name())
+                .gauge());
         assertEquals(7L, metrics.pendingBacklogCount());
         assertEquals(1, queryCount.get());
     }

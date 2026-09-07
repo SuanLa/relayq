@@ -239,10 +239,22 @@
         <result property="count" column="count"/>
     </resultMap>
 
-    <select id="countGroupedByStatus" resultMap="TaskStatusCountResultMap">
-        SELECT status, COUNT(*) AS count
-        FROM task_info
-        GROUP BY status
-    </select>
+    <select id="countActionableBacklog" resultMap="TaskStatusCountResultMap">
+        SELECT 'PENDING' AS status, COUNT(*) AS count
+        FROM task_info FORCE INDEX (idx_status_scheduled)
+        WHERE status = 'PENDING'
+        AND scheduled_time &lt;= NOW(3)
 
+        UNION ALL
+
+        SELECT 'RUNNING', COUNT(*)
+        FROM task_info FORCE INDEX (idx_status_lease)
+        WHERE status = 'RUNNING'
+
+        UNION ALL
+
+        SELECT 'DEAD', COUNT(*)
+        FROM task_info FORCE INDEX (idx_status_created)
+        WHERE status = 'DEAD'
+    </select>
 </mapper>

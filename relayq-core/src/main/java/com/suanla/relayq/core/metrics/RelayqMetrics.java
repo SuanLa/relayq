@@ -11,16 +11,13 @@ import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.ref.WeakReference;
-import java.util.EnumMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.function.LongSupplier;
+import java.util.stream.Stream;
 
 @Slf4j
 public class RelayqMetrics {
@@ -229,7 +226,7 @@ public class RelayqMetrics {
     }
 
     private List<BacklogGaugeState> registerBacklogGauges(MeterRegistry meterRegistry) {
-        List<BacklogGaugeState> states = java.util.Arrays.stream(TaskStatus.values())
+        List<BacklogGaugeState> states = Stream.of(TaskStatus.PENDING, TaskStatus.RUNNING, TaskStatus.DEAD)
                 .map(status -> new BacklogGaugeState(this, status))
                 .toList();
         for (BacklogGaugeState state : states) {
@@ -283,7 +280,7 @@ public class RelayqMetrics {
         Objects.requireNonNull(taskInfoMapper, "taskInfoMapper must not be null");
         return () -> {
             EnumMap<TaskStatus, Long> counts = new EnumMap<>(TaskStatus.class);
-            for (TaskStatusCount row : taskInfoMapper.countGroupedByStatus()) {
+            for (TaskStatusCount row : taskInfoMapper.countActionableBacklog()) {
                 if (row != null && row.getStatus() != null && row.getCount() != null) {
                     counts.put(row.getStatus(), row.getCount());
                 }
