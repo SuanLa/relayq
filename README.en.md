@@ -158,6 +158,24 @@ docker compose down -v
 
 Version `0.1.0` is available on Maven Central. Add the dependency below directly; a local build and install is not required.
 
+### Version Compatibility
+
+The current build and integration baseline for RelayQ `0.1.0` is listed below. This does not imply validation of other version combinations:
+
+| Component | Version |
+| --- | --- |
+| Java | `21` |
+| Spring Boot | `3.2.9` |
+| MyBatis-Plus | `3.5.17` |
+| MySQL | `8.x` (no patch version specified here; not every 8.x release has been individually validated) |
+
+The Starter already brings in `com.baomidou:mybatis-plus-spring-boot3-starter:3.5.17` transitively. You do not need to add another MyBatis-Plus Starter just to enable RelayQ.
+
+> [!WARNING]
+> RelayQ shares MyBatis / MyBatis-Plus dependencies with the host application; their versions are not isolated. Applications already using MyBatis-Plus should align with the combination above and avoid mixing in the older `3.0.5` version or the Boot 2 `mybatis-plus-boot-starter`. Overriding only one module can leave related modules on inconsistent versions. Inspect the resolved dependency tree and revalidate before overriding versions. Other version combinations have not yet been compatibility-tested.
+
+The independent integration example ran successfully with an explicit MyBatis `3.5.19` dependency. Whether this override is still needed after removing the older dependencies has not yet been confirmed, so it is not listed as a required setting here.
+
 ### 1. Add the Starter
 
 ```xml

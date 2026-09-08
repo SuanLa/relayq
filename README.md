@@ -158,6 +158,24 @@ docker compose down -v
 
 `0.1.0` 已发布至 Maven Central，可直接引入以下依赖，无需先在本地构建安装。
 
+### 版本兼容说明
+
+RelayQ `0.1.0` 当前的构建与接入基线如下，不代表已验证其他版本组合：
+
+| 组件 | 版本 |
+| --- | --- |
+| Java | `21` |
+| Spring Boot | `3.2.9` |
+| MyBatis-Plus | `3.5.17` |
+| MySQL | `8.x`（本表不限定补丁版本，亦不代表逐一验证所有 8.x 版本） |
+
+Starter 已传递引入 `com.baomidou:mybatis-plus-spring-boot3-starter:3.5.17`，无需为了启用 RelayQ 再添加一套 MyBatis-Plus Starter。
+
+> [!WARNING]
+> RelayQ 与宿主应用共享 MyBatis / MyBatis-Plus 依赖，不做版本隔离。已有 MyBatis-Plus 的项目应统一采用上述版本组合，避免混入旧版 `3.0.5` 或 Boot 2 的 `mybatis-plus-boot-starter`。仅修改某个模块的版本可能导致相关模块版本不一致；覆盖依赖版本前，请检查最终依赖树并重新验证。其他版本组合暂未经过兼容性验证。
+
+独立示例接入时曾显式指定 MyBatis `3.5.19` 后运行成功，但尚未确认移除旧版依赖后是否仍需该覆盖，因此这里不将它列为必需配置。
+
 ### 1. 引入 Starter
 
 ```xml
