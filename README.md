@@ -2,6 +2,8 @@
 
 # RelayQ
 
+**简体中文** | [English](README.en.md)
+
 ### 基于 MySQL 的轻量级持久化任务队列与调度内核
 
 为 Spring Boot 应用提供延迟执行、失败重试、死信重投、多实例抢占与事故快照能力。
@@ -154,11 +156,7 @@ docker compose down -v
 
 ## 🔌 接入 Spring Boot
 
-当前项目 发布 `0.1.0`。在发布到制品仓库前，先在源码根目录执行：
-
-```bash
-mvn clean install
-```
+`0.1.0` 已发布至 Maven Central，可直接引入以下依赖，无需先在本地构建安装。
 
 ### 1. 引入 Starter
 
