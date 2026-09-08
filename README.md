@@ -17,7 +17,11 @@
 
 **只需 MySQL · 支持水平扩展 · 开箱即用的 Spring Boot Starter**
 
-[快速开始](#-快速开始) · [接入指南](#-接入-spring-boot) · [配置参考](#-常用配置)
+[快速开始](#-快速开始) · [接入指南](#-接入-spring-boot) · [配置参考](#-常用配置) · [性能实测：250 QPS / HTTP P99 141.95 ms](#-容量测试报告)
+
+实测条件：2 × 2C1GiB 应用实例 · 充分预热 · no-op Handler · 持续 15 分钟；非容量上限。
+
+**依赖兼容基线：MyBatis-Plus `3.5.17` / MyBatis `3.5.19`。** 不要混入另一套原生 MyBatis Starter；其他版本组合尚未验证。[版本限制与接入说明](#版本兼容说明)
 
 **0.1.0 发布说明 / Release notes：** [中文](docs/releases/0.1.0.zh-CN.md) · [English](docs/releases/0.1.0.en.md)
 
@@ -167,6 +171,7 @@ RelayQ `0.1.0` 当前的构建与接入基线如下，不代表已验证其他�
 | Java | `21` |
 | Spring Boot | `3.2.9` |
 | MyBatis-Plus | `3.5.17` |
+| MyBatis | `3.5.19`（由 MyBatis-Plus 传递引入） |
 | MySQL | `8.x`（本表不限定补丁版本，亦不代表逐一验证所有 8.x 版本） |
 
 Starter 已传递引入 `com.baomidou:mybatis-plus-spring-boot3-starter:3.5.17`，无需为了启用 RelayQ 再添加一套 MyBatis-Plus Starter。
@@ -174,7 +179,7 @@ Starter 已传递引入 `com.baomidou:mybatis-plus-spring-boot3-starter:3.5.17`�
 > [!WARNING]
 > RelayQ 与宿主应用共享 MyBatis / MyBatis-Plus 依赖，不做版本隔离。已有 MyBatis-Plus 的项目应统一采用上述版本组合，避免混入旧版 `3.0.5` 或 Boot 2 的 `mybatis-plus-boot-starter`。仅修改某个模块的版本可能导致相关模块版本不一致；覆盖依赖版本前，请检查最终依赖树并重新验证。其他版本组合暂未经过兼容性验证。
 
-独立示例接入时曾显式指定 MyBatis `3.5.19` 后运行成功，但尚未确认移除旧版依赖后是否仍需该覆盖，因此这里不将它列为必需配置。
+不要同时引入原生 `org.mybatis.spring.boot:mybatis-spring-boot-starter`。独立示例曾因额外引入该 Starter 的 `3.0.3` 版本，解析到 MyBatis `3.5.14`，与 MP `3.5.17` 混用后出现 `Configuration.parsePendingMethods(boolean)` 方法不存在的启动错误。移除原生 Starter 及其测试 Starter 后，接入者已验证运行正常，无需额外显式指定 MyBatis 版本。已有 MyBatis 的业务项目需评估依赖与自动配置调整，并回归验证业务 Mapper；不能直接套用此删除步骤。
 
 ### 1. 引入 Starter
 

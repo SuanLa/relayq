@@ -17,7 +17,11 @@ Delayed execution, retries, dead-letter redrive, multi-instance task claiming, a
 
 **Only MySQL required · Horizontal scaling · Ready-to-use Spring Boot Starter**
 
-[Quick start](#-quick-start) · [Integration guide](#-spring-boot-integration) · [Configuration](#-common-configuration)
+[Quick start](#-quick-start) · [Integration guide](#-spring-boot-integration) · [Configuration](#-common-configuration) · [Benchmark: 250 QPS / HTTP P99 141.95 ms](#-capacity-test-report)
+
+Test conditions: 2 application instances, each limited to 2 CPU / 1 GiB · Warm state · No-op handler · 15 minutes; not a capacity ceiling.
+
+**Dependency compatibility baseline: MyBatis-Plus `3.5.17` / MyBatis `3.5.19`.** Do not mix in a separate standard MyBatis Starter; other version combinations have not been validated. [Version restrictions and integration notes](#version-compatibility)
 
 **0.1.0 release notes:** [中文](docs/releases/0.1.0.zh-CN.md) · [English](docs/releases/0.1.0.en.md)
 
@@ -167,6 +171,7 @@ The current build and integration baseline for RelayQ `0.1.0` is listed below. T
 | Java | `21` |
 | Spring Boot | `3.2.9` |
 | MyBatis-Plus | `3.5.17` |
+| MyBatis | `3.5.19` (transitively included by MyBatis-Plus) |
 | MySQL | `8.x` (no patch version specified here; not every 8.x release has been individually validated) |
 
 The Starter already brings in `com.baomidou:mybatis-plus-spring-boot3-starter:3.5.17` transitively. You do not need to add another MyBatis-Plus Starter just to enable RelayQ.
@@ -174,7 +179,7 @@ The Starter already brings in `com.baomidou:mybatis-plus-spring-boot3-starter:3.
 > [!WARNING]
 > RelayQ shares MyBatis / MyBatis-Plus dependencies with the host application; their versions are not isolated. Applications already using MyBatis-Plus should align with the combination above and avoid mixing in the older `3.0.5` version or the Boot 2 `mybatis-plus-boot-starter`. Overriding only one module can leave related modules on inconsistent versions. Inspect the resolved dependency tree and revalidate before overriding versions. Other version combinations have not yet been compatibility-tested.
 
-The independent integration example ran successfully with an explicit MyBatis `3.5.19` dependency. Whether this override is still needed after removing the older dependencies has not yet been confirmed, so it is not listed as a required setting here.
+Do not also include the standard `org.mybatis.spring.boot:mybatis-spring-boot-starter`. The independent example previously included version `3.0.3` of that Starter, which caused MyBatis `3.5.14` to be selected alongside MP `3.5.17`. Startup failed because `Configuration.parsePendingMethods(boolean)` was missing. After removing the standard Starter and its test Starter, the integrator confirmed that the application ran successfully without an explicit MyBatis version override. Existing MyBatis applications must assess dependency and auto-configuration changes and regression-test their business mappers; do not blindly apply this removal procedure.
 
 ### 1. Add the Starter
 
