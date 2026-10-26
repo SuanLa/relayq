@@ -48,18 +48,11 @@
 
     <properties>
         <java.version>21</java.version>
-        <mybatis-plus.version>3.5.17</mybatis-plus.version>
+        <relayq.mysql.tests>false</relayq.mysql.tests>
     </properties>
 
     <dependencyManagement>
         <dependencies>
-            <dependency>
-                <groupId>com.baomidou</groupId>
-                <artifactId>mybatis-plus-bom</artifactId>
-                <version>${mybatis-plus.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
             <dependency>
                 <groupId>io.github.suanla</groupId>
                 <artifactId>relayq-core</artifactId>
@@ -99,6 +92,56 @@
             </plugins>
         </pluginManagement>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <relayq.mysql.tests>${relayq.mysql.tests}</relayq.mysql.tests>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>ban-testcontainers</id>
+                        <goals><goal>enforce</goal></goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <searchTransitive>true</searchTransitive>
+                                    <excludes><exclude>org.testcontainers:*</exclude></excludes>
+                                    <message>Testcontainers is prohibited in all scopes; use explicitly authorized external MySQL tests.</message>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>no-production-orm-dependencies</id>
+                        <goals><goal>enforce</goal></goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <searchTransitive>true</searchTransitive>
+                                    <excludes>
+                                        <exclude>org.mybatis:*</exclude>
+                                        <exclude>org.mybatis.spring.boot:*</exclude>
+                                        <exclude>com.baomidou:*</exclude>
+                                    </excludes>
+                                    <includes>
+                                        <!-- Host ORM compatibility fixtures are test-only. -->
+                                        <include>*:*:*:*:test</include>
+                                    </includes>
+                                    <message>RelayQ production storage must remain independent of MyBatis / MyBatis-Plus.</message>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>

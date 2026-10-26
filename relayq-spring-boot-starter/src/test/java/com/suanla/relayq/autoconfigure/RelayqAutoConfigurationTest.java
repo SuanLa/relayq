@@ -1,7 +1,5 @@
 package com.suanla.relayq.autoconfigure;
 
-import com.baomidou.mybatisplus.autoconfigure.MybatisPlusProperties;
-import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.suanla.relayq.autoconfigure.fixture.ScannedHandler;
 import com.suanla.relayq.core.config.RelayqProperties;
@@ -61,7 +59,6 @@ class RelayqAutoConfigurationTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(
-                    MybatisPlusAutoConfiguration.class,
                     RelayqAutoConfiguration.class))
             .withUserConfiguration(InfrastructureConfiguration.class)
             .withPropertyValues("relayq.pull.interval-ms=30000");
@@ -174,7 +171,6 @@ class RelayqAutoConfigurationTest {
     void createsMetricsAfterBootMeterRegistryAutoConfiguration() {
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(
-                        MybatisPlusAutoConfiguration.class,
                         MetricsAutoConfiguration.class,
                         SimpleMetricsExportAutoConfiguration.class,
                         CompositeMeterRegistryAutoConfiguration.class,
@@ -205,17 +201,20 @@ class RelayqAutoConfigurationTest {
     }
 
     @Test
-    void appendsCoreMapperLocationWhenHostOverridesDefaults() {
-        MybatisPlusProperties properties = new MybatisPlusProperties()
-                .setMapperLocations(new String[]{"classpath*:/host-mapper/**/*.xml"});
-
-        new RelayqAutoConfiguration()
-                .relayqMybatisPlusPropertiesCustomizer()
-                .customize(properties);
-
-        assertThat(properties.getMapperLocations()).containsExactly(
-                "classpath*:/host-mapper/**/*.xml",
-                "classpath*:/mapper/**/*.xml");
+    void jdbcStoresAreRegisteredWithoutOrmAndBackOffForUserStores() {
+        contextRunner.run(context -> {
+            assertThat(context.getBean(TaskInfoMapper.class))
+                    .isSameAs(context.getBean("testTaskInfoMapper"));
+            assertThat(context).doesNotHaveBean("relayqMybatisPlusPropertiesCustomizer");
+        });
+        DataSource source = mock(DataSource.class);
+        RelayqAutoConfiguration configuration = new RelayqAutoConfiguration();
+        assertThat(configuration.taskInfoMapper(source))
+                .isInstanceOf(com.suanla.relayq.core.jdbc.JdbcTaskInfoMapper.class);
+        assertThat(configuration.taskExecuteLogMapper(source))
+                .isInstanceOf(com.suanla.relayq.core.jdbc.JdbcTaskExecuteLogMapper.class);
+        assertThat(configuration.taskSnapshotMapper(source))
+                .isInstanceOf(com.suanla.relayq.core.jdbc.JdbcTaskSnapshotMapper.class);
     }
 
     @Configuration(proxyBeanMethods = false)

@@ -93,7 +93,7 @@ public class TaskSubmitService {
         } catch (DuplicateKeyException error) {
             return findExistingAfterDuplicate(cmd.bizKey(), error);
         } catch (RuntimeException error) {
-            // 纯 MyBatis 场景没有 Spring 异常翻译，集成测试和非 Spring 使用方仍需识别 MySQL 1062。
+            // 自定义存储实现可能不做 Spring 异常翻译，仍需识别底层 MySQL 1062。
             if (DatabaseExceptionClassifier.isDuplicateKey(error)) {
                 return findExistingAfterDuplicate(cmd.bizKey(), error);
             }

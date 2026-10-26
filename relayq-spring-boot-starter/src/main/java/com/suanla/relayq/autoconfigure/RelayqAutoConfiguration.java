@@ -1,7 +1,5 @@
 package com.suanla.relayq.autoconfigure;
 
-import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
-import com.baomidou.mybatisplus.autoconfigure.MybatisPlusPropertiesCustomizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.suanla.relayq.core.config.RelayqProperties;
 import com.suanla.relayq.core.executor.RequeueRejectedHandler;
@@ -10,6 +8,9 @@ import com.suanla.relayq.core.executor.TaskWorkerPool;
 import com.suanla.relayq.core.handler.HandlerRegistry;
 import com.suanla.relayq.core.handler.RelayqHandler;
 import com.suanla.relayq.core.handler.TaskHandler;
+import com.suanla.relayq.core.jdbc.JdbcTaskExecuteLogMapper;
+import com.suanla.relayq.core.jdbc.JdbcTaskInfoMapper;
+import com.suanla.relayq.core.jdbc.JdbcTaskSnapshotMapper;
 import com.suanla.relayq.core.mapper.TaskExecuteLogMapper;
 import com.suanla.relayq.core.mapper.TaskInfoMapper;
 import com.suanla.relayq.core.mapper.TaskSnapshotMapper;
@@ -32,7 +33,6 @@ import com.suanla.relayq.core.snapshot.SnapshotCollector;
 import com.suanla.relayq.core.snapshot.SnapshotWriter;
 import com.suanla.relayq.core.support.SnowflakeIdGenerator;
 import io.micrometer.core.instrument.MeterRegistry;
-import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -42,7 +42,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.AnnotationUtils;
@@ -50,23 +52,39 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
-import java.util.Arrays;
 import java.util.Map;
-import java.util.stream.Stream;
 
 @AutoConfiguration(after = {
         DataSourceAutoConfiguration.class,
-        MybatisPlusAutoConfiguration.class
+        DataSourceTransactionManagerAutoConfiguration.class
 }, afterName = {
         "org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration",
         "org.springframework.boot.actuate.autoconfigure.metrics.CompositeMeterRegistryAutoConfiguration"
 })
 @ConditionalOnBean(DataSource.class)
+@EnableConfigurationProperties
 @ConditionalOnProperty(prefix = "relayq", name = "enabled", matchIfMissing = true)
-@MapperScan("com.suanla.relayq.core.mapper")
 public class RelayqAutoConfiguration {
 
-    private static final String DEFAULT_MAPPER_LOCATION = "classpath*:/mapper/**/*.xml";
+    @Bean
+    @ConditionalOnMissingBean
+    public TaskInfoMapper taskInfoMapper(DataSource dataSource) {
+        return new JdbcTaskInfoMapper(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public TaskExecuteLogMapper taskExecuteLogMapper(DataSource dataSource) {
+        return new JdbcTaskExecuteLogMapper(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public TaskSnapshotMapper taskSnapshotMapper(DataSource dataSource) {
+        return new JdbcTaskSnapshotMapper(dataSource);
+    }
+
+
     private static final int SNOWFLAKE_WORKER_BITS = 10;
     private static final int ERROR_STACK_MAX_BYTES = 64 * 1024;
 
@@ -75,26 +93,6 @@ public class RelayqAutoConfiguration {
     @ConditionalOnMissingBean
     public RelayqProperties relayqProperties() {
         return new RelayqProperties();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(name = "relayqMybatisPlusPropertiesCustomizer")
-    public MybatisPlusPropertiesCustomizer relayqMybatisPlusPropertiesCustomizer() {
-        return properties -> {
-            String[] configured = properties.getMapperLocations();
-            if (configured != null
-                    && Arrays.asList(configured).contains(DEFAULT_MAPPER_LOCATION)) {
-                return;
-            }
-            /*
-             * 宿主一旦配置 mapper-locations 就会覆盖 MyBatis-Plus 默认值，
-             * 因此必须把 core XML 的默认通配路径显式追加回来。
-             */
-            properties.setMapperLocations(Stream.concat(
-                            configured == null ? Stream.empty() : Arrays.stream(configured),
-                            Stream.of(DEFAULT_MAPPER_LOCATION))
-                    .toArray(String[]::new));
-        };
     }
 
     @Bean

@@ -1,9 +1,6 @@
 package com.suanla.relayq.core.snapshot;
 
-import com.baomidou.mybatisplus.core.MybatisConfiguration;
-import com.baomidou.mybatisplus.core.MybatisSqlSessionFactoryBuilder;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.suanla.relayq.core.TestDatabaseProperties;
 import com.suanla.relayq.core.config.RelayqProperties;
 import com.suanla.relayq.core.domain.FailureKind;
 import com.suanla.relayq.core.domain.TaskInfo;
@@ -16,22 +13,9 @@ import com.suanla.relayq.core.mapper.TaskSnapshotMapper;
 import com.suanla.relayq.core.metrics.RelayqMetrics;
 import com.suanla.relayq.core.service.TaskStateMachine;
 import com.suanla.relayq.core.support.SnowflakeIdGenerator;
-import org.apache.ibatis.builder.xml.XMLMapperBuilder;
-import org.apache.ibatis.datasource.pooled.PooledDataSource;
-import org.apache.ibatis.io.Resources;
-import org.apache.ibatis.jdbc.ScriptRunner;
-import org.apache.ibatis.mapping.Environment;
-import org.apache.ibatis.session.SqlSession;
-import org.apache.ibatis.session.SqlSessionFactory;
-import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-
-import java.io.IOException;
-import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -49,22 +33,16 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /*
- * 不给容器设置 TZ；本类新增的 created_at 是纯审计时间，
+ * 不修改 MySQL 服务器时区；本类新增的 created_at 是纯审计时间，
  * 所有会和 NOW(3) 比较的任务与租约字段仍由数据库生成。
  */
-class SnapshotIntegrationTest {
-
-    private static final String JDBC_URL = TestDatabaseProperties.jdbcUrl("relayq_snapshot_test");
-    private static final String USERNAME = TestDatabaseProperties.get("relayq.test.username", "root");
-    private static final String PASSWORD = TestDatabaseProperties.get("relayq.test.password", "root123456");
+@org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "relayq.mysql.tests", matches = "true")
+class SnapshotIntegrationTest extends com.suanla.relayq.core.MySqlIntegrationSupport {
 
     private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator(23);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    private static SqlSessionFactory sqlSessionFactory;
 
-    private SqlSession serviceSession;
-    private SqlSession snapshotSession;
     private TaskInfoMapper serviceTaskMapper;
     private TaskExecuteLogMapper serviceLogMapper;
     private TaskSnapshotMapper serviceSnapshotMapper;
@@ -72,62 +50,21 @@ class SnapshotIntegrationTest {
     private TaskSnapshotMapper snapshotWriterMapper;
     private SnapshotAdmission admission;
 
-    @BeforeAll
-    static void createSqlSessionFactory() throws IOException {
-        PooledDataSource dataSource = new PooledDataSource(
-                "com.mysql.cj.jdbc.Driver", JDBC_URL, USERNAME, PASSWORD);
-        try (Connection conn = dataSource.getConnection();
-             Reader reader = Resources.getResourceAsReader("db/schema.sql")) {
-            ScriptRunner runner = new ScriptRunner(conn);
-            runner.setLogWriter(null);
-            runner.setErrorLogWriter(null);
-            runner.runScript(reader);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-
-        Environment environment = new Environment(
-                "snapshot-testcontainers",
-                new JdbcTransactionFactory(),
-                dataSource);
-        MybatisConfiguration configuration = new MybatisConfiguration(environment);
-        configuration.addMapper(TaskInfoMapper.class);
-        configuration.addMapper(TaskExecuteLogMapper.class);
-        configuration.addMapper(TaskSnapshotMapper.class);
-        parseMapper(configuration, "mapper/TaskInfoMapper.xml");
-        parseMapper(configuration, "mapper/TaskExecuteLogMapper.xml");
-        parseMapper(configuration, "mapper/TaskSnapshotMapper.xml");
-        sqlSessionFactory = new MybatisSqlSessionFactoryBuilder().build(configuration);
-    }
-
     @BeforeEach
     void setUp() {
-        serviceSession = sqlSessionFactory.openSession(true);
-        snapshotSession = sqlSessionFactory.openSession(true);
-        serviceTaskMapper = serviceSession.getMapper(TaskInfoMapper.class);
-        serviceLogMapper = serviceSession.getMapper(TaskExecuteLogMapper.class);
-        serviceSnapshotMapper = serviceSession.getMapper(TaskSnapshotMapper.class);
-        snapshotTaskMapper = snapshotSession.getMapper(TaskInfoMapper.class);
-        snapshotWriterMapper = snapshotSession.getMapper(TaskSnapshotMapper.class);
+        serviceTaskMapper = new com.suanla.relayq.core.jdbc.JdbcTaskInfoMapper(dataSource);
+        serviceLogMapper = new com.suanla.relayq.core.jdbc.JdbcTaskExecuteLogMapper(dataSource);
+        serviceSnapshotMapper = new com.suanla.relayq.core.jdbc.JdbcTaskSnapshotMapper(dataSource);
+        snapshotTaskMapper = new com.suanla.relayq.core.jdbc.JdbcTaskInfoMapper(dataSource);
+        snapshotWriterMapper = new com.suanla.relayq.core.jdbc.JdbcTaskSnapshotMapper(dataSource);
     }
 
     @AfterEach
-    void tearDown() throws SQLException {
+    void tearDown() throws Exception {
         if (admission != null) {
             admission.close();
         }
-        if (serviceSession != null) {
-            try (Statement statement = serviceSession.getConnection().createStatement()) {
-                statement.executeUpdate("DELETE FROM task_snapshot");
-                statement.executeUpdate("DELETE FROM task_execute_log");
-                statement.executeUpdate("DELETE FROM task_info");
-            } finally {
-                serviceSession.close();
-            }
-        }
-        if (snapshotSession != null) {
-            snapshotSession.close();
-        }
+        cleanDatabase();
     }
 
     @Test
@@ -249,7 +186,8 @@ class SnapshotIntegrationTest {
                     ?, ?, ?, ?, ?, DATE_ADD(NOW(3), INTERVAL 30 SECOND)
                 )
                 """;
-        try (var statement = serviceSession.getConnection().prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
             statement.setLong(1, taskId);
             statement.setString(2, "snapshot-" + UUID.randomUUID());
             statement.setString(3, "snapshot-handler");
@@ -268,7 +206,6 @@ class SnapshotIntegrationTest {
     }
 
     private TaskInfo readFreshTask(long taskId) {
-        serviceSession.clearCache();
         return serviceTaskMapper.selectById(taskId);
     }
 
@@ -276,8 +213,6 @@ class SnapshotIntegrationTest {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         List<TaskSnapshot> snapshots;
         do {
-            // 后台 writer 使用另一 SqlSession，读取前必须清理当前 session 的一级缓存。
-            serviceSession.clearCache();
             snapshots = serviceSnapshotMapper.selectByTaskId(taskId);
             if (!snapshots.isEmpty()) {
                 assertEquals(1, snapshots.size());
@@ -289,15 +224,5 @@ class SnapshotIntegrationTest {
         return snapshots.getFirst();
     }
 
-    private static void parseMapper(MybatisConfiguration configuration, String resource)
-            throws IOException {
-        try (Reader reader = Resources.getResourceAsReader(resource)) {
-            new XMLMapperBuilder(
-                    reader,
-                    configuration,
-                    resource,
-                    configuration.getSqlFragments())
-                    .parse();
-        }
-    }
+
 }

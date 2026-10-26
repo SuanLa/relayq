@@ -305,7 +305,7 @@ public class TaskStateMachine {
             warnDuplicateAudit(task, outcome);
             return null;
         } catch (RuntimeException errorInsertingAudit) {
-            // 纯 MyBatis 不做 Spring 异常翻译，仍需把 uk_task_attempt 识别为同一种 fencing 结果。
+            // 自定义存储可能不做 Spring 异常翻译，仍需把 uk_task_attempt 识别为同一种 fencing 结果。
             if (DatabaseExceptionClassifier.isDuplicateKey(errorInsertingAudit)) {
                 warnDuplicateAudit(task, outcome);
                 return null;

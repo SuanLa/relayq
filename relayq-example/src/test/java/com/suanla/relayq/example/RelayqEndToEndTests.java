@@ -14,6 +14,7 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.annotation.DirtiesContext;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -26,11 +27,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "relayq.mysql.tests", matches = "true")
+@org.springframework.context.annotation.Import(RelayqEndToEndTests.DatabaseConfiguration.class)
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
-                "spring.sql.init.mode=always",
-                "spring.sql.init.schema-locations=classpath:db/schema.sql",
+                "spring.sql.init.mode=never",
                 "relayq.instance-id=relayq-e2e",
                 "relayq.pull.interval-ms=50",
                 "relayq.pull.jitter-ratio=0",
@@ -49,13 +51,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
                 "relayq.metrics.backlog-cache-seconds=1"
         })
 @ActiveProfiles("e2e")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @TestMethodOrder(MethodOrderer.MethodName.class)
-// Web 端到端测试必须使用 Boot 4 MVC 采用的 tools.jackson，core 内部仍保留 com.fasterxml.jackson。
-/*
- * 与上下文测试一致，不给容器设置 TZ，保留 UTC 数据库 / CST JVM 的回归场景。
- * withInitScript 直接消费 core jar 中唯一的 db/schema.sql。
- */
 class RelayqEndToEndTests {
+    @org.springframework.boot.test.context.TestConfiguration(proxyBeanMethods = false)
+    static class DatabaseConfiguration {
+        @org.springframework.context.annotation.Bean(destroyMethod = "close")
+        com.suanla.relayq.core.ExternalMySqlFixture externalMySqlFixture() {
+            return com.suanla.relayq.core.ExternalMySqlFixture.open();
+        }
+
+        @org.springframework.context.annotation.Bean
+        javax.sql.DataSource dataSource(com.suanla.relayq.core.ExternalMySqlFixture fixture) {
+            return fixture.dataSource();
+        }
+    }
 
     private static final Duration DEFAULT_WAIT = Duration.ofSeconds(8);
 
@@ -285,7 +295,7 @@ class RelayqEndToEndTests {
                 "/api/dead-letters/" + taskId + "/redrive",
                 request);
 
-        assertNotNull(requiredBody(second).path("status").textValue());
+        assertEquals(HttpStatus.CONFLICT, second.getStatusCode());
         assertEquals(
                 1,
                 count(
@@ -293,22 +303,27 @@ class RelayqEndToEndTests {
                                 + " WHERE id = ? AND redrive_by = 'e2e-operator'"
                                 + " AND redrive_at IS NOT NULL",
                         taskId));
-        awaitStatus(HttpStatus.CONFLICT.value(), first.getBody().path("status").textValue());
         awaitStatus(taskId, "DEAD");
     }
 
     @Test
     void a10_manualSnapshotIsAcceptedThroughPublicApi() {
+        ResponseEntity<JsonNode> submitted = submit(
+                uniqueBizKey("manual-snapshot"), "echo-handler",
+                objectMapper.createObjectNode().put("message", "snapshot"), null, 0);
+        assertEquals(HttpStatus.CREATED, submitted.getStatusCode());
+        long taskId = requiredBody(submitted).path("task_id").asLong();
+        awaitStatus(taskId, "SUCCESS");
         ResponseEntity<JsonNode> response = post(
                 "/api/snapshots/manual",
-                objectMapper.createObjectNode());
+                objectMapper.createObjectNode().put("task_id", taskId).put("attempt_no", 1));
         assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
 
         assertTrue(requiredBody(response).path("accepted").asBoolean());
         awaitCondition(
                 () -> count(
                         "SELECT COUNT(*) FROM task_snapshot"
-                                + " WHERE trigger_type = 'MANUAL'") == 1,
+                                + " WHERE trigger_type = 'MANUAL' AND task_id = ?", taskId) == 1,
                 DEFAULT_WAIT,
                 "manual snapshot");
     }

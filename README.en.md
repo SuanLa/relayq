@@ -21,7 +21,9 @@ Delayed execution, retries, dead-letter redrive, multi-instance task claiming, a
 
 Test conditions: 2 application instances, each limited to 2 CPU / 1 GiB · Warm state · No-op handler · 15 minutes; not a capacity ceiling.
 
-**Dependency compatibility baseline: MyBatis-Plus `3.5.17` / MyBatis `3.5.19`.** Do not mix in a separate standard MyBatis Starter; other version combinations have not been validated. [Version restrictions and integration notes](#version-compatibility)
+**Published `0.1.0` compatibility baseline: MyBatis-Plus `3.5.17` / MyBatis `3.5.19`.** For that release, do not mix in a separate standard MyBatis Starter. [Version restrictions and integration notes](#version-compatibility)
+
+**Unreleased change (Issue #1): the current source uses Spring JDBC and no longer brings in MyBatis / MyBatis-Plus transitively.** Maven Central `0.1.0` does not contain this change. See the [migration and verification guide](docs/migrations/spring-jdbc.en.md).
 
 **0.1.0 release notes:** [中文](docs/releases/0.1.0.zh-CN.md) · [English](docs/releases/0.1.0.en.md)
 
@@ -163,6 +165,8 @@ docker compose down -v
 Version `0.1.0` is available on Maven Central. Add the dependency below directly; a local build and install is not required.
 
 ### Version Compatibility
+
+The ORM restrictions below apply only to the published `0.1.0` release. See the [migration guide](docs/migrations/spring-jdbc.en.md) for the current JDBC implementation, host dependencies, and internal interface changes.
 
 The current build and integration baseline for RelayQ `0.1.0` is listed below. This does not imply validation of other version combinations:
 
@@ -332,7 +336,9 @@ relayq
 
 ## 🧪 Build and Test
 
-Run the full verification:
+The current source does not use Testcontainers. Default builds run database-free unit tests and explicitly report MySQL integration tests as skipped. External MySQL tests require supplied environment variables and authorization for writes/DDL on isolated test tables.
+
+Run the default build verification (no database connection):
 
 ```bash
 mvn clean verify
@@ -352,6 +358,8 @@ java -jar relayq-example/target/relayq-example-0.1.0.jar
 ```
 
 ## 📋 Capacity Test Report
+
+> These historical results predate the JDBC migration and do not establish equivalent performance for the Spring JDBC implementation. This migration validates functionality, transactions, and dependency compatibility; performance requires a separate rerun.
 
 A warm-state **250 QPS × 15-minute** test completed on 2026-09-07: all 225,001 submissions succeeded with no dropped iterations and an HTTP P99 of **141.95 ms**. Post-test verification by run ID confirmed that all tasks and execution audits succeeded on their first attempt and that primary/replica verification passed. The deadlock counter did not increase during observation, and application restart counts remained unchanged.
 

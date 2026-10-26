@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Local integration-test connection; never package or commit credentials.
+/relayq-test.local.properties

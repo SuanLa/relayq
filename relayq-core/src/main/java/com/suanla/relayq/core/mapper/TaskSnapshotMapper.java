@@ -1,12 +1,12 @@
 package com.suanla.relayq.core.mapper;
 
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.suanla.relayq.core.domain.TaskSnapshot;
-import org.apache.ibatis.annotations.Param;
-
 import java.util.List;
 
-public interface TaskSnapshotMapper extends BaseMapper<TaskSnapshot> {
+/** Internal storage contract; no ORM dependency. Single-row lookups return null when absent. */
+public interface TaskSnapshotMapper {
 
-    List<TaskSnapshot> selectByTaskId(@Param("taskId") long taskId);
+    int insert(TaskSnapshot record);
+
+    List<TaskSnapshot> selectByTaskId(long taskId);
 }

@@ -1,8 +1,5 @@
 package com.suanla.relayq.core.service;
 
-import com.baomidou.mybatisplus.core.MybatisConfiguration;
-import com.baomidou.mybatisplus.core.MybatisSqlSessionFactoryBuilder;
-import com.suanla.relayq.core.TestDatabaseProperties;
 import com.suanla.relayq.core.config.RelayqProperties;
 import com.suanla.relayq.core.domain.ExecuteOutcome;
 import com.suanla.relayq.core.domain.FailureKind;
@@ -16,22 +13,9 @@ import com.suanla.relayq.core.mapper.TaskExecuteLogMapper;
 import com.suanla.relayq.core.mapper.TaskInfoMapper;
 import com.suanla.relayq.core.mapper.TaskSnapshotMapper;
 import com.suanla.relayq.core.support.SnowflakeIdGenerator;
-import org.apache.ibatis.builder.xml.XMLMapperBuilder;
-import org.apache.ibatis.datasource.pooled.PooledDataSource;
-import org.apache.ibatis.io.Resources;
-import org.apache.ibatis.jdbc.ScriptRunner;
-import org.apache.ibatis.mapping.Environment;
-import org.apache.ibatis.session.SqlSession;
-import org.apache.ibatis.session.SqlSessionFactory;
-import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-
-import java.io.IOException;
-import java.io.Reader;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -48,60 +32,26 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /*
- * 这里刻意不给 MySQL 容器设置 TZ，让裸容器 UTC 与开发机 JVM 时区保持错位。
+ * 使用用户指定的 MySQL 和本次隔离测试表，不修改服务器时区。
  * 调度与租约字段的测试造数一律使用数据库 NOW(3)，避免应用时间掩盖跨时区缺陷。
  */
-class RelayqServiceIntegrationTest {
-
-    private static final String JDBC_URL = TestDatabaseProperties.jdbcUrl("relayq_test");
-    private static final String USERNAME = TestDatabaseProperties.get("relayq.test.username", "root");
-    private static final String PASSWORD = TestDatabaseProperties.get("relayq.test.password", "root123456");
+@org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "relayq.mysql.tests", matches = "true")
+class RelayqServiceIntegrationTest extends com.suanla.relayq.core.MySqlIntegrationSupport {
 
     private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator(21);
 
-    private static SqlSessionFactory sqlSessionFactory;
 
-    private SqlSession sqlSession;
     private TaskInfoMapper taskInfoMapper;
     private TaskSubmitService taskSubmitService;
     private TaskStateMachine taskStateMachine;
     private TaskQueryService taskQueryService;
     private DeadLetterService deadLetterService;
 
-    @BeforeAll
-    static void createSqlSessionFactory() throws IOException {
-        PooledDataSource dataSource = new PooledDataSource(
-                "com.mysql.cj.jdbc.Driver", JDBC_URL, USERNAME, PASSWORD);
-        try (Connection conn = dataSource.getConnection();
-             Reader reader = Resources.getResourceAsReader("db/schema.sql")) {
-            ScriptRunner runner = new ScriptRunner(conn);
-            runner.setLogWriter(null);
-            runner.setErrorLogWriter(null);
-            runner.runScript(reader);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-
-        Environment environment = new Environment(
-                "testcontainers",
-                new JdbcTransactionFactory(),
-                dataSource);
-        MybatisConfiguration configuration = new MybatisConfiguration(environment);
-        configuration.addMapper(TaskInfoMapper.class);
-        configuration.addMapper(TaskExecuteLogMapper.class);
-        configuration.addMapper(TaskSnapshotMapper.class);
-        parseMapper(configuration, "mapper/TaskInfoMapper.xml");
-        parseMapper(configuration, "mapper/TaskExecuteLogMapper.xml");
-        parseMapper(configuration, "mapper/TaskSnapshotMapper.xml");
-        sqlSessionFactory = new MybatisSqlSessionFactoryBuilder().build(configuration);
-    }
-
     @BeforeEach
     void setUp() {
-        sqlSession = sqlSessionFactory.openSession(true);
-        taskInfoMapper = sqlSession.getMapper(TaskInfoMapper.class);
-        TaskExecuteLogMapper taskExecuteLogMapper = sqlSession.getMapper(TaskExecuteLogMapper.class);
-        TaskSnapshotMapper taskSnapshotMapper = sqlSession.getMapper(TaskSnapshotMapper.class);
+        taskInfoMapper = new com.suanla.relayq.core.jdbc.JdbcTaskInfoMapper(dataSource);
+        TaskExecuteLogMapper taskExecuteLogMapper = new com.suanla.relayq.core.jdbc.JdbcTaskExecuteLogMapper(dataSource);
+        TaskSnapshotMapper taskSnapshotMapper = new com.suanla.relayq.core.jdbc.JdbcTaskSnapshotMapper(dataSource);
 
         HandlerRegistry handlerRegistry = new HandlerRegistry();
         handlerRegistry.register("registered-handler", context -> {
@@ -120,17 +70,8 @@ class RelayqServiceIntegrationTest {
     }
 
     @AfterEach
-    void tearDown() throws SQLException {
-        if (sqlSession == null) {
-            return;
-        }
-        try (Statement statement = sqlSession.getConnection().createStatement()) {
-            statement.executeUpdate("DELETE FROM task_snapshot");
-            statement.executeUpdate("DELETE FROM task_execute_log");
-            statement.executeUpdate("DELETE FROM task_info");
-        } finally {
-            sqlSession.close();
-        }
+    void tearDown() throws Exception {
+        cleanDatabase();
     }
 
     @Test
@@ -284,17 +225,6 @@ class RelayqServiceIntegrationTest {
         assertEquals(1, logs.getFirst().getAttemptNo());
     }
 
-    private static void parseMapper(MybatisConfiguration configuration, String resource) throws IOException {
-        try (Reader reader = Resources.getResourceAsReader(resource)) {
-            new XMLMapperBuilder(
-                    reader,
-                    configuration,
-                    resource,
-                    configuration.getSqlFragments())
-                    .parse();
-        }
-    }
-
     private SubmitCommand command(String bizKey, String handlerName) {
         return new SubmitCommand(bizKey, handlerName, "{}", null, null, null);
     }
@@ -317,7 +247,8 @@ class RelayqServiceIntegrationTest {
                     ?, ?, ?, ?, ?, DATE_ADD(NOW(3), INTERVAL ? SECOND)
                 )
                 """;
-        try (var statement = sqlSession.getConnection().prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
             statement.setLong(1, taskId);
             statement.setString(2, uniqueBizKey());
             statement.setString(3, "registered-handler");
@@ -340,23 +271,17 @@ class RelayqServiceIntegrationTest {
         return readFreshTask(taskId);
     }
 
-    /*
-     * 测试会长期复用同一个 SqlSession，其他 session 或裸 JDBC 的变更不会让 MyBatis 一级缓存失效。
-     * 验证数据库当前状态前必须显式清理缓存，避免断言读到之前查询留下的旧对象。
-     */
     private TaskInfo readFreshTask(long taskId) {
-        sqlSession.clearCache();
         return taskQueryService.getById(taskId);
     }
 
-    // 执行日志 Mapper 与任务 Mapper 共用 sqlSession，验证读取也必须清理同一份一级缓存。
     private List<TaskExecuteLog> readFreshExecuteLogs(long taskId) {
-        sqlSession.clearCache();
         return taskQueryService.listExecuteLogs(taskId);
     }
 
     private long countTasksByBizKey(String bizKey) throws SQLException {
-        try (var statement = sqlSession.getConnection().prepareStatement(
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
                 "SELECT COUNT(*) FROM task_info WHERE biz_key = ?")) {
             statement.setString(1, bizKey);
             try (var resultSet = statement.executeQuery()) {
@@ -367,7 +292,8 @@ class RelayqServiceIntegrationTest {
     }
 
     private long countAllTasks() throws SQLException {
-        try (var statement = sqlSession.getConnection().createStatement();
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement();
              var resultSet = statement.executeQuery("SELECT COUNT(*) FROM task_info")) {
             resultSet.next();
             return resultSet.getLong(1);

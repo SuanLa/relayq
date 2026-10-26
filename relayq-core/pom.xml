@@ -27,10 +27,6 @@
             <artifactId>spring-jdbc</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-extension</artifactId>
-        </dependency>
 
         <dependency>
             <groupId>io.micrometer</groupId>
@@ -60,6 +56,25 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>shared-mysql-test-fixture</id>
+                        <phase>process-test-classes</phase>
+                        <goals><goal>test-jar</goal></goals>
+                        <configuration>
+                            <includes>
+                                <include>**/ExternalMySqlFixture.class</include>
+                                <include>**/ExternalMySqlDataSource.class</include>
+                                <include>**/MySqlIntegrationSupport.class</include>
+                                <include>**/MySqlTestConfiguration.class</include>
+                            </includes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <!--
               架构约束的可执行版本：内核不许依赖 Spring Boot 自动装配。
               core 一旦依赖 autoconfigure，它就不是内核，只是个业务应用 —— 这条规则写在

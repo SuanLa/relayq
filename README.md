@@ -21,7 +21,9 @@
 
 实测条件：2 × 2C1GiB 应用实例 · 充分预热 · no-op Handler · 持续 15 分钟；非容量上限。
 
-**依赖兼容基线：MyBatis-Plus `3.5.17` / MyBatis `3.5.19`。** 不要混入另一套原生 MyBatis Starter；其他版本组合尚未验证。[版本限制与接入说明](#版本兼容说明)
+**已发布 `0.1.0` 的依赖兼容基线：MyBatis-Plus `3.5.17` / MyBatis `3.5.19`。** 该版本不要混入另一套原生 MyBatis Starter。[版本限制与接入说明](#版本兼容说明)
+
+**未发布变更（Issue #1）：当前源码存储层已迁移到 Spring JDBC，不再传递引入 MyBatis / MyBatis-Plus。** Maven Central 的 `0.1.0` 不包含此变更；[迁移说明与验证方法](docs/migrations/spring-jdbc.md)。
 
 **0.1.0 发布说明 / Release notes：** [中文](docs/releases/0.1.0.zh-CN.md) · [English](docs/releases/0.1.0.en.md)
 
@@ -163,6 +165,8 @@ docker compose down -v
 `0.1.0` 已发布至 Maven Central，可直接引入以下依赖，无需先在本地构建安装。
 
 ### 版本兼容说明
+
+以下 ORM 限制仅适用于已发布的 `0.1.0`。当前源码的 JDBC 实现、宿主依赖保留方式和内部接口变化见[迁移说明](docs/migrations/spring-jdbc.md)。
 
 RelayQ `0.1.0` 当前的构建与接入基线如下，不代表已验证其他版本组合：
 
@@ -332,7 +336,9 @@ relayq
 
 ## 🧪 构建与测试
 
-运行完整验证：
+当前源码不使用 Testcontainers。默认构建只执行无需数据库的单元测试，MySQL 集成测试明确显示为跳过。连接用户指定的 MySQL 前，须提供环境变量并取得隔离测试表的读写/DDL 授权。
+
+运行默认构建验证（不连接数据库）：
 
 ```bash
 mvn clean verify
@@ -352,6 +358,8 @@ java -jar relayq-example/target/relayq-example-0.1.0.jar
 ```
 
 ## 📋 容量测试报告
+
+> 以下为迁移前的历史测试结果，不代表 Spring JDBC 实现已完成同等压测。本次 JDBC 迁移验证的是功能、事务和依赖兼容性，性能需要另行复测。
 
 2026-09-07 完成热态 **250 QPS × 15 分钟**测试：225001 次提交全部成功、零丢弃，
 HTTP P99 为 **141.95 ms**。测试后按 RunId 验证，所有任务及执行审计均为首次成功，

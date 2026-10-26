@@ -1,9 +1,6 @@
 package com.suanla.relayq.core.scheduler;
 
-import com.baomidou.mybatisplus.core.MybatisConfiguration;
-import com.baomidou.mybatisplus.core.MybatisSqlSessionFactoryBuilder;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.suanla.relayq.core.TestDatabaseProperties;
 import com.suanla.relayq.core.config.RelayqProperties;
 import com.suanla.relayq.core.domain.TaskInfo;
 import com.suanla.relayq.core.domain.TaskStatus;
@@ -25,26 +22,11 @@ import com.suanla.relayq.core.service.SubmitResult;
 import com.suanla.relayq.core.service.TaskSubmitService;
 import com.suanla.relayq.core.service.TaskStateMachine;
 import com.suanla.relayq.core.support.SnowflakeIdGenerator;
-import org.apache.ibatis.builder.xml.XMLMapperBuilder;
-import org.apache.ibatis.datasource.pooled.PooledDataSource;
-import org.apache.ibatis.io.Resources;
-import org.apache.ibatis.jdbc.ScriptRunner;
-import org.apache.ibatis.mapping.Environment;
-import org.apache.ibatis.session.SqlSession;
-import org.apache.ibatis.session.SqlSessionFactory;
-import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.support.AbstractPlatformTransactionManager;
-import org.springframework.transaction.support.DefaultTransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.io.IOException;
-import java.io.Reader;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
@@ -71,62 +53,26 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 /*
- * 这里刻意不给 MySQL 容器设置 TZ，让裸容器 UTC 与开发机 JVM 时区保持错位。
- * 所有参与调度和租约比较的测试数据都基于数据库 NOW(3) 生成，使本类同时承担时钟漂移回归测试。
+ * 测试连接用户指定的 MySQL，不修改服务器时区。
+ * 调度和租约测试数据基于数据库 NOW(3)；时区漂移用例只在数据库/JVM 时钟不同时执行。
  */
-class SchedulerIntegrationTest {
-
-    private static final String JDBC_URL = TestDatabaseProperties.jdbcUrl("relayq_scheduler_test");
-    private static final String USERNAME = TestDatabaseProperties.get("relayq.test.username", "root");
-    private static final String PASSWORD = TestDatabaseProperties.get("relayq.test.password", "root123456");
+@org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "relayq.mysql.tests", matches = "true")
+class SchedulerIntegrationTest extends com.suanla.relayq.core.MySqlIntegrationSupport {
 
     private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator(22);
 
-    private static SqlSessionFactory sqlSessionFactory;
 
     private final List<AutoCloseable> closeables = new ArrayList<>();
 
-    private SqlSession pullSession;
-    private SqlSession serviceSession;
     private TaskInfoMapper pullMapper;
     private TaskInfoMapper serviceMapper;
     private TaskExecuteLogMapper executeLogMapper;
 
-    @BeforeAll
-    static void createSqlSessionFactory() throws IOException {
-        PooledDataSource dataSource = new PooledDataSource(
-                "com.mysql.cj.jdbc.Driver", JDBC_URL, USERNAME, PASSWORD);
-        try (Connection conn = dataSource.getConnection();
-             Reader reader = Resources.getResourceAsReader("db/schema.sql")) {
-            ScriptRunner runner = new ScriptRunner(conn);
-            runner.setLogWriter(null);
-            runner.setErrorLogWriter(null);
-            runner.runScript(reader);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-        Environment environment = new Environment(
-                "scheduler-testcontainers",
-                new JdbcTransactionFactory(),
-                dataSource);
-        MybatisConfiguration configuration = new MybatisConfiguration(environment);
-        configuration.addMapper(TaskInfoMapper.class);
-        configuration.addMapper(TaskExecuteLogMapper.class);
-        configuration.addMapper(TaskSnapshotMapper.class);
-        parseMapper(configuration, "mapper/TaskInfoMapper.xml");
-        parseMapper(configuration, "mapper/TaskExecuteLogMapper.xml");
-        parseMapper(configuration, "mapper/TaskSnapshotMapper.xml");
-        sqlSessionFactory = new MybatisSqlSessionFactoryBuilder().build(configuration);
-    }
-
     @BeforeEach
     void setUp() {
-        // puller 独占一个非自动提交 session，测试事务管理器才能精确控制同一连接的隔离级别。
-        pullSession = sqlSessionFactory.openSession(false);
-        serviceSession = sqlSessionFactory.openSession(true);
-        pullMapper = pullSession.getMapper(TaskInfoMapper.class);
-        serviceMapper = serviceSession.getMapper(TaskInfoMapper.class);
-        executeLogMapper = serviceSession.getMapper(TaskExecuteLogMapper.class);
+        pullMapper = new com.suanla.relayq.core.jdbc.JdbcTaskInfoMapper(dataSource);
+        serviceMapper = new com.suanla.relayq.core.jdbc.JdbcTaskInfoMapper(dataSource);
+        executeLogMapper = new com.suanla.relayq.core.jdbc.JdbcTaskExecuteLogMapper(dataSource);
     }
 
     @AfterEach
@@ -134,18 +80,7 @@ class SchedulerIntegrationTest {
         for (int index = closeables.size() - 1; index >= 0; index--) {
             closeables.get(index).close();
         }
-        if (serviceSession != null) {
-            try (Statement statement = serviceSession.getConnection().createStatement()) {
-                statement.executeUpdate("DELETE FROM task_snapshot");
-                statement.executeUpdate("DELETE FROM task_execute_log");
-                statement.executeUpdate("DELETE FROM task_info");
-            } finally {
-                serviceSession.close();
-            }
-        }
-        if (pullSession != null) {
-            pullSession.close();
-        }
+        cleanDatabase();
     }
 
     @Test
@@ -160,7 +95,8 @@ class SchedulerIntegrationTest {
         assertEquals(0, puller.pullOnce());
 
         assertEquals("READ-COMMITTED", observedIsolation.get());
-        try (Statement statement = serviceSession.getConnection().createStatement();
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
              var resultSet = statement.executeQuery("SELECT @@transaction_isolation")) {
             assertTrue(resultSet.next());
             assertEquals("REPEATABLE-READ", resultSet.getString(1));
@@ -287,7 +223,7 @@ class SchedulerIntegrationTest {
     }
 
     @Test
-    void dbTimeControlsClaimAndReapingWhenJvmAndContainerTimeZonesDiffer() throws Exception {
+    void dbTimeControlsClaimAndReapingWhenJvmAndDatabaseTimeZonesDiffer() throws Exception {
         LocalDateTime databaseNow = selectDatabaseNow();
         LocalDateTime applicationNow = LocalDateTime.now();
         long clockDifferenceMillis = Math.abs(
@@ -406,7 +342,7 @@ class SchedulerIntegrationTest {
             RelayqProperties properties,
             TaskAvailabilitySignal taskAvailabilitySignal) {
         TransactionTemplate transactionTemplate = new TransactionTemplate(
-                new SingleSessionTransactionManager(pullSession));
+                new org.springframework.jdbc.datasource.DataSourceTransactionManager(dataSource));
         return new TaskPuller(
                 mapper,
                 transactionTemplate,
@@ -456,12 +392,8 @@ class SchedulerIntegrationTest {
                 new Class<?>[]{TaskInfoMapper.class},
                 (proxy, method, args) -> {
                     if (method.getName().equals("selectDueIdsForUpdateSkipLocked")) {
-                        try (Statement statement = pullSession.getConnection().createStatement();
-                             var resultSet = statement.executeQuery(
-                                     "SELECT @@transaction_isolation")) {
-                            resultSet.next();
-                            observedIsolation.set(resultSet.getString(1));
-                        }
+                        observedIsolation.set(new org.springframework.jdbc.core.JdbcTemplate(dataSource)
+                                .queryForObject("SELECT @@transaction_isolation", String.class));
                     }
                     try {
                         return method.invoke(pullMapper, args);
@@ -546,7 +478,8 @@ class SchedulerIntegrationTest {
                     ?, ?, ?, ?, ?, DATE_ADD(NOW(3), INTERVAL ? SECOND)
                 )
                 """;
-        try (var statement = serviceSession.getConnection().prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
             statement.setLong(1, taskId);
             statement.setString(2, "scheduler-" + UUID.randomUUID());
             statement.setString(3, "integration-handler");
@@ -570,17 +503,13 @@ class SchedulerIntegrationTest {
         return readFreshTask(taskId);
     }
 
-    /*
-     * 测试会长期复用 serviceSession，其他 session 或裸 JDBC 的变更不会让 MyBatis 一级缓存失效。
-     * 验证数据库当前状态前必须显式清理缓存，避免断言读到之前查询留下的旧对象。
-     */
     private TaskInfo readFreshTask(long taskId) {
-        serviceSession.clearCache();
         return serviceMapper.selectById(taskId);
     }
 
     private LocalDateTime selectDatabaseNow() throws SQLException {
-        try (Statement statement = serviceSession.getConnection().createStatement();
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
              var resultSet = statement.executeQuery("SELECT NOW(3)")) {
             assertTrue(resultSet.next());
             return resultSet.getObject(1, LocalDateTime.class);
@@ -626,93 +555,8 @@ class SchedulerIntegrationTest {
         return properties;
     }
 
-    private static void parseMapper(MybatisConfiguration configuration, String resource)
-            throws IOException {
-        try (Reader reader = Resources.getResourceAsReader(resource)) {
-            new XMLMapperBuilder(
-                    reader,
-                    configuration,
-                    resource,
-                    configuration.getSqlFragments())
-                    .parse();
-        }
-    }
-
     private record KernelFixture(TaskWorkerPool workerPool, TaskDispatcher dispatcher) {
     }
 
-    private static final class SingleSessionTransactionManager
-            extends AbstractPlatformTransactionManager {
 
-        private final SqlSession sqlSession;
-
-        private SingleSessionTransactionManager(SqlSession sqlSession) {
-            this.sqlSession = sqlSession;
-        }
-
-        @Override
-        protected Object doGetTransaction() {
-            return new TransactionState(sqlSession.getConnection());
-        }
-
-        /*
-         * 测试脚手架会跨多个拉取事务复用同一个 SqlSession，其他 session 已提交的写入不会自动清掉一级缓存。
-         * 每个事务开始前必须清理缓存，否则新事务可能继续命中上一个事务缓存的空拉取结果。
-         */
-        @Override
-        protected void doBegin(Object transaction, TransactionDefinition definition) {
-            TransactionState state = (TransactionState) transaction;
-            sqlSession.clearCache();
-            try {
-                state.previousIsolation = state.connection.getTransactionIsolation();
-                state.previousAutoCommit = state.connection.getAutoCommit();
-                if (definition.getIsolationLevel() != TransactionDefinition.ISOLATION_DEFAULT) {
-                    state.connection.setTransactionIsolation(definition.getIsolationLevel());
-                }
-                state.connection.setAutoCommit(false);
-            } catch (SQLException error) {
-                throw new IllegalStateException("failed to begin pull transaction", error);
-            }
-        }
-
-        @Override
-        protected void doCommit(DefaultTransactionStatus status) {
-            try {
-                ((TransactionState) status.getTransaction()).connection.commit();
-            } catch (SQLException error) {
-                throw new IllegalStateException("failed to commit pull transaction", error);
-            }
-        }
-
-        @Override
-        protected void doRollback(DefaultTransactionStatus status) {
-            try {
-                ((TransactionState) status.getTransaction()).connection.rollback();
-            } catch (SQLException error) {
-                throw new IllegalStateException("failed to roll back pull transaction", error);
-            }
-        }
-
-        @Override
-        protected void doCleanupAfterCompletion(Object transaction) {
-            TransactionState state = (TransactionState) transaction;
-            try {
-                state.connection.setTransactionIsolation(state.previousIsolation);
-                state.connection.setAutoCommit(state.previousAutoCommit);
-            } catch (SQLException error) {
-                throw new IllegalStateException("failed to restore pull connection state", error);
-            }
-        }
-
-        private static final class TransactionState {
-
-            private final Connection connection;
-            private int previousIsolation;
-            private boolean previousAutoCommit;
-
-            private TransactionState(Connection connection) {
-                this.connection = connection;
-            }
-        }
-    }
 }
